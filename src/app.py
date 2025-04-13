@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from flask import Flask, jsonify, render_template, request
 from datetime import datetime
 
@@ -17,11 +18,12 @@ app = Flask(__name__)
 ALL_DATA = None
 LAST_LOAD_TIME = None
 DATA_LOAD_ERROR = None
+MASTER_CLASSES_DATA = None
 
 
 def load_data_if_needed():
     """Loads data from files if not already loaded or if outdated."""
-    global ALL_DATA, LAST_LOAD_TIME, DATA_LOAD_ERROR
+    global ALL_DATA, LAST_LOAD_TIME, DATA_LOAD_ERROR, MASTER_CLASSES_DATA
     now = datetime.now()
     # Reload data if older than, say, 1 hour (adjust as needed)
     # Or if it hasn't been loaded yet
@@ -30,11 +32,25 @@ def load_data_if_needed():
         try:
             material_dir = os.path.join(project_root, "Material")
             ALL_DATA = load_all_data(material_dir)
+
+            # Load master class data
+            master_classes_path = os.path.join(app.static_folder, "master_classes.json")
+            if os.path.exists(master_classes_path):
+                with open(master_classes_path, "r", encoding="utf-8") as f:
+                    MASTER_CLASSES_DATA = json.load(f)
+                print(f"[{now}] Loaded {len(MASTER_CLASSES_DATA)} master classes.")
+            else:
+                MASTER_CLASSES_DATA = []
+                print(
+                    f"[{now}] WARNING: master_classes.json not found in static folder."
+                )
+
             LAST_LOAD_TIME = now
             DATA_LOAD_ERROR = None
-            print(f"[{now}] Data loaded successfully.")
+            print(f"[{now}] Main data loaded successfully.")
         except Exception as e:
-            ALL_DATA = None  # Ensure data is None on error
+            ALL_DATA = None
+            MASTER_CLASSES_DATA = None
             DATA_LOAD_ERROR = f"Failed to load data: {e}"
             print(f"[{now}] ERROR loading data: {e}", file=sys.stderr)
 
@@ -74,16 +90,21 @@ def get_next_opening():
         )
     if not ALL_DATA:
         return jsonify({"error": "Data not loaded"}), 500
+    if MASTER_CLASSES_DATA is None:
+        print(
+            "Warning: Master class data not loaded, cannot exclude wines from attended classes."
+        )
 
     # --- Parse Preferences from Query Parameters --- #
     dynamic_preferences = {}
-    pref_houses = request.args.getlist("house")  # Use getlist for multiple values
+    excluded_wines = set()
+
+    pref_houses = request.args.getlist("house")
     if pref_houses:
         dynamic_preferences["houses"] = pref_houses
 
     pref_size = request.args.get("size")
-    if pref_size:
-        # Translate 'magnum' query param to list expected by core logic
+    if pref_size and pref_size != "any":
         if pref_size == "magnum":
             dynamic_preferences["sizes"] = [
                 "magnum",
@@ -95,7 +116,7 @@ def get_next_opening():
         # else:
         #    dynamic_preferences['sizes'] = [pref_size]
 
-    pref_older_than = request.args.get("older_than")
+    pref_older_than = request.args.get("older_than_year")
     if pref_older_than:
         try:
             dynamic_preferences["older_than_year"] = int(pref_older_than)
@@ -104,17 +125,39 @@ def get_next_opening():
                 jsonify({"error": "Invalid year format for older_than parameter."}),
                 400,
             )
-    # -------------------------------------------- #
+
+    # --- Get wines from attended Master Classes --- #
+    attended_mc_ids = request.args.getlist("attended_mc_id")
+    if attended_mc_ids and MASTER_CLASSES_DATA:
+        for mc_id in attended_mc_ids:
+            # Find the master class by its identifier (link or title/presenter combo)
+            found_mc = None
+            for mc in MASTER_CLASSES_DATA:
+                identifier = (
+                    mc.get("link") or f"{mc.get('presenter')}-{mc.get('title')}"
+                )
+                if identifier == mc_id:
+                    found_mc = mc
+                    break
+            if found_mc and found_mc.get("wines"):
+                excluded_wines.update(found_mc["wines"])
+                # print(f"DEBUG: Excluding wines from MC: {found_mc.get('title')}") # Optional debug
+
+    # Add explicitly excluded wines to preferences if any
+    if excluded_wines:
+        dynamic_preferences["excluded_wines"] = list(excluded_wines)
+        # print(f"DEBUG: Total excluded wines: {excluded_wines}") # Optional debug
+    # --------------------------------------------- #
 
     current_time = datetime.now()
 
-    # --- Pass dynamic preferences to core logic --- #
+    # --- Pass preferences (including excluded wines) to core logic --- #
     next_openings = find_next_rare_opening(
         ALL_DATA,
         current_time,
         dynamic_preferences=dynamic_preferences if dynamic_preferences else None,
     )
-    # --------------------------------------------- #
+    # -------------------------------------------------------------- #
 
     if not next_openings:
         # Message depends on whether preferences were applied
@@ -147,4 +190,5 @@ def get_next_opening():
 # --- Main Execution ---
 if __name__ == "__main__":
     # Note: debug=True is useful for development but should be False in production
-    app.run(debug=True)
+    # Run on all interfaces (0.0.0.0) to be accessible on the local network
+    app.run(host="0.0.0.0", debug=True)

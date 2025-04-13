@@ -2,319 +2,778 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Grand Champagne Helper</title>
     <style>
+        /* Basic Reset & Mobile First Defaults */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent; /* Disable tap highlight */
+        }
+        html, body {
+            height: 100%;
+            overflow: hidden; /* Prevent scrolling body */
+        }
         body {
-            font-family: sans-serif;
-            line-height: 1.6;
-            margin: 2em;
-            background-color: #f8f8f8;
-        }
-        .container {
-            max-width: 800px;
-            margin: auto;
-            background-color: #fff;
-            padding: 2em;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .main-content {
-            display: flex;
-            gap: 2em; /* Space between columns */
-        }
-        .preferences {
-            flex: 0 0 35%; /* Fixed width for preferences column */
-            /* Alternatively: width: 35%; */
-            border-right: 1px solid #eee;
-            padding-right: 2em;
-        }
-        .preferences h2 {
-             margin-top: 0; /* Align heading */
-        }
-        .results-section {
-            flex-grow: 1; /* Takes remaining space */
-        }
-        .checkbox-group {
-            max-height: 400px; /* Limit height and allow scroll */
-            overflow-y: auto;
-            border: 1px solid #eee;
-            padding: 0.5em;
-            margin-top: 0.5em;
-        }
-        .checkbox-group label {
-            display: block; /* Ensure each label is on its own line */
-            margin-bottom: 0.3em;
-        }
-        .pref-group {
-            margin-bottom: 1em;
-        }
-        .button-group button {
-            margin-right: 0.5em;
-            padding: 0.5em 1em;
-            cursor: pointer;
-        }
-        h1 {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.5;
+            background-color: #f0f2f5; /* Light background */
             color: #333;
+            display: flex;
+            flex-direction: column; /* Stack header, content, nav */
+        }
+
+        /* Header */
+        header {
+            background: #ffffff;
+            color: #1c1e21;
+            padding: 12px 16px;
             text-align: center;
-            margin-bottom: 1em;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            z-index: 10;
+            flex-shrink: 0; /* Prevent header from shrinking */
+        }
+        header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        /* Main Content Area (Scrollable) */
+        .tab-content-container {
+            flex-grow: 1; /* Take remaining space */
+            overflow-y: auto; /* Allow content to scroll */
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+            padding: 16px;
+            background-color: #f0f2f5;
+        }
+
+        /* Individual Tab Content Panes */
+        .tab-pane {
+            display: none; /* Hidden by default */
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        .tab-pane.active {
+            display: block; /* Show active tab */
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Bottom Tab Navigation */
+        .tab-nav {
+            display: flex;
+            justify-content: space-around;
+            background-color: #ffffff;
+            border-top: 1px solid #e0e0e0;
+            padding: 8px 0;
+            position: sticky; /* Make nav sticky if needed */
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            z-index: 10;
+            flex-shrink: 0; /* Prevent nav from shrinking */
+        }
+        .tab-nav-button {
+            background: none;
+            border: none;
+            color: #606770;
+            padding: 6px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            text-align: center;
+            flex-grow: 1;
+            transition: background-color 0.2s ease, color 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+        .tab-nav-button svg { /* Basic icon styling */
+             width: 22px;
+             height: 22px;
+             fill: currentColor;
+             margin-bottom: 2px;
+        }
+        .tab-nav-button.active {
+            color: #1877f2; /* Active tab color */
+        }
+        .tab-nav-button:hover:not(.active) {
+             background-color: #f0f2f5;
+             border-radius: 6px;
+        }
+
+        /* --- Content Specific Styles --- */
+
+        /* General Helper Classes */
+        .card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+        }
+        .loading, .error, .no-results {
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+            color: #606770;
+            background-color: #fff;
+            border-radius: 8px;
+            margin: 16px 0;
+        }
+        .error {
+            color: #fa383e;
+            background-color: #ffebee;
+            border: 1px solid #fa383e;
         }
         h2 {
-            color: #555;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 0.3em;
-            margin-top: 1.5em;
+            font-size: 16px;
+            font-weight: 600;
+            color: #1c1e21;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e0e0e0;
         }
-        .opening {
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 1em;
-            margin-bottom: 1em;
-            background-color: #fdfdfd;
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: #333;
+            font-size: 14px;
         }
-        .opening p {
-            margin: 0.5em 0;
+        select, input[type="number"], input[type="text"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ccd0d5;
+            border-radius: 6px;
+            font-size: 14px;
+            background-color: #f5f6f7;
+            margin-bottom: 12px;
+            appearance: none; /* Remove default styling */
+            -webkit-appearance: none;
+            -moz-appearance: none;
         }
-        .opening strong {
-            color: #444;
+        select {
+             background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%204%205%22%3E%3Cpath%20fill%3D%22%23606770%22%20d%3D%22M2%200L0%202h4L2%200zm0%205L0%203h4l-2%202z%22%2F%3E%3C%2Fsvg%3E'); /* Basic dropdown arrow */
+             background-repeat: no-repeat;
+             background-position: right 10px center;
+             background-size: 8px 10px;
+             padding-right: 30px; /* Space for arrow */
         }
-        #loading, #error {
+        button.action-button {
+            display: block;
+            width: 100%;
+            padding: 10px 16px;
+            font-size: 15px;
+            font-weight: 500;
+            border-radius: 6px;
+            cursor: pointer;
             text-align: center;
-            font-style: italic;
-            color: #888;
-            margin-top: 2em;
+            margin-bottom: 10px;
+            border: none;
         }
-        #error {
-            color: #c00;
+        button.primary { background-color: #1877f2; color: white; }
+        button.secondary { background-color: #e4e6eb; color: #1c1e21; }
+        button.warning { background-color: #fa383e; color: white; }
+
+
+        /* Recommendations Tab */
+        #recommendations-content .opening {
+            /* Use flexbox for internal layout */
+            display: flex;
+            flex-direction: column; /* Stack main info and details */
+            gap: 4px; /* Space between elements */
+            border-left: 4px solid #1877f2; /* Keep accent */
+            padding: 12px 16px; /* Adjust padding */
+        }
+        #recommendations-content .opening .rec-name {
+            font-size: 17px; /* Larger name */
+            font-weight: 600;
+            color: #1c1e21;
+            line-height: 1.3;
+        }
+        #recommendations-content .opening .rec-time {
+            font-size: 15px;
+            font-weight: 500;
+            color: #1877f2; /* Use accent color for time */
+            margin-bottom: 6px; /* Add space below time */
+        }
+        #recommendations-content .opening .rec-details {
+             display: flex; /* Align details horizontally */
+             flex-wrap: wrap; /* Allow wrapping on small screens */
+             gap: 10px; /* Space between detail items */
+             font-size: 14px;
+             color: #606770;
+        }
+         #recommendations-content .opening .rec-details span {
+             /* Individual detail item styling (e.g., stand, price) */
+             background-color: #f0f2f5;
+             padding: 2px 6px;
+             border-radius: 4px;
+         }
+        #recommendations-content .opening .rec-details .score {
+             font-weight: 500;
+             color: #333; /* Less prominent score color */
+             background-color: transparent; /* No background for score */
+             padding: 0;
         }
         .price-na {
-            color: #999;
             font-style: italic;
+            color: #8a8d91;
         }
-        /* Style number input to match select */
-        input[type="number"],
-        select {
-            padding: 0.4em;
-            border: 1px solid #ccc;
+
+
+        /* Preferences Tab */
+        .pref-group {
+            margin-bottom: 16px;
+        }
+        /* House Search/Filter (Will be added in next step) */
+        #house-search { margin-bottom: 8px; }
+        .checkbox-list {
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid #ccd0d5;
+            border-radius: 6px;
+            padding: 8px 12px;
+            background-color: #ffffff;
+        }
+        .checkbox-list label {
+            display: flex; /* Align checkbox and text */
+            align-items: center;
+            margin-bottom: 8px;
+            font-weight: normal;
+        }
+        .checkbox-list input[type="checkbox"] {
+            width: auto; /* Override default */
+            margin: 0 10px 0 0; /* Spacing */
+            appearance: checkbox; /* Restore checkbox appearance */
+            -webkit-appearance: checkbox;
+            -moz-appearance: checkbox;
+        }
+
+        /* Master Classes Tab */
+        #masterclass-content .day-section {
+            margin-bottom: 16px;
+        }
+        #masterclass-content .day-heading {
+            font-size: 14px;
+            font-weight: 600;
+            color: #606770;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 8px;
+        }
+        #masterclass-content .mc-list {
+            list-style: none;
+            padding: 0;
+        }
+        #masterclass-content .mc-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f2f5;
+        }
+        #masterclass-content .mc-item:last-child {
+            border-bottom: none;
+        }
+        #masterclass-content .mc-item label {
+            display: flex;
+            align-items: center;
+            font-weight: normal;
+            font-size: 14px;
+            margin-bottom: 2px; /* Smaller gap */
+        }
+        #masterclass-content .mc-item input[type="checkbox"] {
+             width: auto;
+             margin: 0 10px 0 0;
+             appearance: checkbox;
+             -webkit-appearance: checkbox;
+             -moz-appearance: checkbox;
+        }
+        #masterclass-content .mc-item label:has(input:checked) {
+            /* Optional: Slightly change background or add border when checked */
+            background-color: #e7f3ff; /* Light blue background */
             border-radius: 4px;
-            font-size: inherit; /* Make font same as body */
-            width: 100px; /* Adjust width as needed */
+            padding-right: 6px; /* Add some padding if using background */
         }
+        #masterclass-content .mc-item .details {
+            font-size: 12px;
+            color: #606770;
+            padding-left: 28px; /* Indent under checkbox */
+        }
+
     </style>
 </head>
 <body>
-    <div class="container">
+    <header>
         <h1>Grand Champagne Helper</h1>
+    </header>
 
-        <div class="main-content">
-            <!-- Preferences Section -->
-            <div class="preferences">
-                <h2>Preferences</h2>
-                {% if data_load_error %}
-                    <p class="error">Error loading data: {{ data_load_error }}. Cannot set preferences.</p>
-                {% else %}
-                <form id="preferences-form">
-                    <div class="pref-group">
-                        <label>Houses (Select all that apply):</label>
-                        <div class="checkbox-group">
-                            {% for house in houses %}
-                            <label><input type="checkbox" name="house" value="{{ house }}"> {{ house }}</label>
-                            {% else %}
-                            <p>Could not load house list.</p>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                    <div class="pref-group">
-                        <label for="size">Bottle Size:</label>
-                        <select name="size" id="size">
-                            <option value="any" selected>Any</option>
-                            <option value="magnum">Magnum+</option>
-                            <!-- Add more specific sizes if needed -->
-                        </select>
-                    </div>
-
-                    <div class="pref-group">
-                        <label for="older_than_year">Older than Year (e.g., 1990):</label>
-                        <input type="number" name="older_than_year" id="older_than_year" min="1900" max="2025">
-                    </div>
-
-                    <div class="button-group">
-                        <button type="button" id="apply-prefs">Apply Preferences</button>
-                        <button type="button" id="ville-prefs">Ville Defaults</button>
-                        <button type="button" id="clear-prefs">Clear All</button>
-                    </div>
-                </form>
-                {% endif %}
-            </div>
-            <!-- End Preferences Section -->
-
-            <!-- Results Section -->
-            <div class="results-section">
-                <h2>Next Highly Recommended Openings (Score >= 2)</h2>
-                <div id="openings-list">
-                    <p id="loading">Loading recommendations...</p>
-                    <p id="error" style="display: none;">Could not load recommendations.</p>
-                </div>
-            </div>
-            <!-- End Results Section -->
-        </div>
+    <!-- Data Load Error -->
+    {% if data_load_error %}
+    <div class="error" style="margin: 10px 16px; text-align: center;">
+        <strong>Error loading initial data:</strong> {{ data_load_error }}<br>App might not function correctly.
     </div>
+    {% endif %}
+
+
+    <!-- Main content area where tab panes will live -->
+    <div class="tab-content-container">
+
+        <!-- Tab 1: Recommendations -->
+        <div id="recommendations-tab-content" class="tab-pane active">
+            <!-- Content loaded by JS -->
+            <div id="recommendations-content">
+                 <div class="loading">Loading recommendations...</div>
+                 <div class="error" style="display: none;"></div>
+                 <div class="no-results" style="display: none;"></div>
+                 <!-- Results will be appended here -->
+            </div>
+        </div>
+
+        <!-- Tab 2: Preferences -->
+        <div id="preferences-tab-content" class="tab-pane">
+             <h2>Preferences</h2>
+             <form id="preferences-form">
+                 <!-- House Search/Filter (placeholder for next step) -->
+                 <div class="pref-group">
+                     <label for="house-search">Filter Houses:</label>
+                     <input type="text" id="house-search" placeholder="Search houses...">
+                     <label>Select Preferred Houses:</label>
+                     <div id="house-list-container" class="checkbox-list">
+                         <!-- Houses loaded by JS -->
+                         <p class="loading">Loading houses...</p>
+                     </div>
+                 </div>
+
+                 <div class="pref-group">
+                     <label for="size-select">Bottle Size:</label>
+                     <select name="size" id="size-select">
+                         <option value="any" selected>Any</option>
+                         <option value="magnum">Magnum+</option>
+                     </select>
+                 </div>
+
+                 <div class="pref-group">
+                     <label for="older-than-input">Vintage (or Older):</label>
+                     <input type="number" name="older_than_year" id="older-than-input" min="1900" max="2025" placeholder="e.g., 1990">
+                 </div>
+
+                 <div class="button-group" style="margin-top: 20px;">
+                     <!-- Apply button removed - will auto-apply on change -->
+                     <button type="button" id="ville-prefs-btn" class="action-button secondary">Ville Defaults</button>
+                     <button type="button" id="clear-prefs-btn" class="action-button warning">Clear All Preferences</button>
+                 </div>
+             </form>
+        </div>
+
+        <!-- Tab 3: Master Classes -->
+        <div id="masterclass-tab-content" class="tab-pane">
+            <h2>Attended Master Classes</h2>
+            <div id="masterclass-content">
+                <!-- MCs loaded by JS -->
+                <div class="loading">Loading Master Classes...</div>
+                <div class="error" style="display: none;"></div>
+                 <!-- MC list will be populated here -->
+            </div>
+        </div>
+
+    </div> <!-- End tab-content-container -->
+
+    <!-- Bottom Tab Navigation -->
+    <nav class="tab-nav">
+        <button class="tab-nav-button active" data-tab="recommendations-tab-content">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+            <span>Recommend</span>
+        </button>
+        <button class="tab-nav-button" data-tab="preferences-tab-content">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
+            <span>Preferences</span>
+        </button>
+        <button class="tab-nav-button" data-tab="masterclass-tab-content">
+             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-3 2v5l-1-.75L15 9V4h2zm-3 7H8v-2h7v2zm3 0h-2v-2h2v2zm0-3H8V9h10v2z"/></svg>
+            <span>Masterclass</span>
+        </button>
+    </nav>
 
     <script>
         // --- Ville's Preferences (Defaults) ---
-        const VILLE_PREFS = {
-            houses: ["Bollinger", "Charles Heidsieck", "Palmer"],
-            size: "magnum", // Represents Magnum+
-            older_than_year: 1990
-        };
+         const VILLE_PREFS = {
+             houses: ["Bollinger", "Charles Heidsieck", "Palmer"],
+             size: "magnum",
+             older_than_year: 1990
+         };
         // ----------------------------------------
 
         document.addEventListener('DOMContentLoaded', function() {
-            const openingsList = document.getElementById('openings-list');
-            const loadingMessage = document.getElementById('loading');
-            const errorMessage = document.getElementById('error');
-            const applyButton = document.getElementById('apply-prefs');
-            const villeButton = document.getElementById('ville-prefs');
-            const clearButton = document.getElementById('clear-prefs');
-            const prefsForm = document.getElementById('preferences-form');
+            // Tab Switching Logic
+            const tabButtons = document.querySelectorAll('.tab-nav-button');
+            const tabPanes = document.querySelectorAll('.tab-pane');
 
-            function fetchRecommendations() {
-                errorMessage.style.display = 'none'; // Clear previous errors
-                loadingMessage.style.display = 'block';
-                openingsList.innerHTML = ''; // Clear previous results
-                openingsList.appendChild(loadingMessage); // Put loading back
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetTabId = button.getAttribute('data-tab');
 
-                // Collect preferences from form
-                const formData = new FormData(prefsForm);
-                const params = new URLSearchParams();
+                    // Deactivate all buttons and panes
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabPanes.forEach(pane => pane.classList.remove('active'));
 
-                formData.getAll('house').forEach(h => params.append('house', h));
-                if (formData.get('size') && formData.get('size') !== 'any') {
-                    // Backend will need to know 'magnum' means magnum and larger
-                    params.append('size', formData.get('size'));
+                    // Activate clicked button and corresponding pane
+                    button.classList.add('active');
+                    document.getElementById(targetTabId).classList.add('active');
+                });
+            });
+
+            // --- Element References (adjust based on new structure) ---
+            const recommendationsContent = document.getElementById('recommendations-content');
+            const recLoading = recommendationsContent.querySelector('.loading');
+            const recError = recommendationsContent.querySelector('.error');
+            const recNoResults = recommendationsContent.querySelector('.no-results');
+            // Results list will be created dynamically
+
+            const prefsForm = document.getElementById('preferences-form'); // Keep form reference
+            const houseSearchInput = document.getElementById('house-search'); // <<< Add reference for search input
+            const houseListContainer = document.getElementById('house-list-container');
+            const sizeSelect = document.getElementById('size-select');
+            const olderThanInput = document.getElementById('older-than-input');
+            const villePrefsBtn = document.getElementById('ville-prefs-btn');
+            const clearPrefsBtn = document.getElementById('clear-prefs-btn');
+
+            const masterclassContent = document.getElementById('masterclass-content');
+            const mcLoading = masterclassContent.querySelector('.loading');
+            const mcError = masterclassContent.querySelector('.error');
+            // MC list will be created dynamically
+
+            // --- Data Loading Flags ---
+            let housesLoaded = false;
+            let masterClassesLoaded = false;
+
+             // --- Populate House List ---
+             function populateHouseList(houses) {
+                 houseListContainer.innerHTML = ''; // Clear loading/previous
+                 if (!houses || houses.length === 0) {
+                     houseListContainer.innerHTML = '<p>No houses found.</p>';
+                     return;
+                 }
+                 houses.forEach(house => {
+                     const label = document.createElement('label');
+                     const checkbox = document.createElement('input');
+                     checkbox.type = 'checkbox';
+                     checkbox.name = 'house'; // Used for form data
+                     checkbox.value = house;
+                     label.appendChild(checkbox);
+                     label.appendChild(document.createTextNode(` ${house}`)); // Add space
+                     houseListContainer.appendChild(label);
+                 });
+                 housesLoaded = true;
+                 // Add listener after population
+                 addPreferenceChangeListener(houseListContainer);
+             }
+             // Initial house data comes from Flask template rendering, if available
+             const initialHouses = {{ houses|tojson|safe }};
+             if (initialHouses) {
+                 populateHouseList(initialHouses);
+             } else {
+                 houseListContainer.innerHTML = '<p class="error">Could not load house list from server.</p>';
+             }
+
+
+             // --- Master Class Loading & Display ---
+            async function fetchMasterClasses() {
+                mcLoading.style.display = 'block';
+                mcError.style.display = 'none';
+                // Clear previous list if any
+                masterclassContent.querySelectorAll('.day-section').forEach(el => el.remove());
+
+                try {
+                    const response = await fetch("{{ url_for('static', filename='master_classes.json') }}");
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const classes = await response.json();
+                    displayMasterClasses(classes);
+                    mcLoading.style.display = 'none';
+                    masterClassesLoaded = true;
+                } catch (error) {
+                    console.error("Error loading master classes:", error);
+                    mcLoading.style.display = 'none';
+                    mcError.textContent = `Failed to load classes: ${error.message}`;
+                    mcError.style.display = 'block';
                 }
-                if (formData.get('older_than_year')) {
-                    params.append('older_than', formData.get('older_than_year'));
-                }
-
-                const queryString = params.toString();
-                const apiUrl = `/api/next-opening${queryString ? '?' + queryString : ''}`;
-                console.log("Fetching:", apiUrl); // Log the URL being fetched
-
-                fetch(apiUrl)
-                    .then(response => {
-                        if (!response.ok) {
-                            // Try to get error details from response body
-                            return response.json().then(errData => {
-                                throw new Error(`HTTP error ${response.status}: ${errData.error || response.statusText}`);
-                            }).catch(() => {
-                                // Fallback if response body is not JSON or empty
-                                throw new Error(`HTTP error! Status: ${response.status}`);
-                            });
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        loadingMessage.style.display = 'none';
-                        openingsList.innerHTML = ''; // Clear loading message again
-
-                        if (data.message) {
-                            // Handle the "No openings available" message
-                            const noOpening = document.createElement('p');
-                            noOpening.textContent = data.message;
-                            openingsList.appendChild(noOpening);
-                        } else if (Array.isArray(data) && data.length > 0) {
-                            data.forEach(opening => {
-                                const div = document.createElement('div');
-                                div.className = 'opening';
-
-                                const name = document.createElement('h3');
-                                name.textContent = opening.name || 'N/A';
-                                div.appendChild(name);
-
-                                const time = document.createElement('p');
-                                let formattedTime = 'N/A';
-                                if (opening.time) {
-                                    try {
-                                        const date = new Date(opening.time);
-                                        formattedTime = date.toLocaleTimeString('en-US', {
-                                            weekday: 'long',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            hour12: false
-                                        });
-                                    } catch (e) { /* Keep 'N/A' */ }
-                                }
-                                time.innerHTML = `<strong>Time:</strong> ${formattedTime}`;
-                                div.appendChild(time);
-
-                                const stand = document.createElement('p');
-                                stand.innerHTML = `<strong>Stand:</strong> ${opening.stand || 'N/A'}`;
-                                div.appendChild(stand);
-
-                                const price = document.createElement('p');
-                                let priceText = 'N/A';
-                                let priceClass = 'price-na';
-                                if (opening.glass_price && opening.glass_price !== 'N/A') {
-                                    priceText = `${opening.glass_price}${typeof opening.glass_price === 'string' && !opening.glass_price.endsWith('€') ? '€' : ''}`;
-                                    priceClass = '';
-                                } else if (opening.glass_price === 'N/A' || opening.glass_price === null) {
-                                    priceText = 'N/A';
-                                }
-                                price.innerHTML = `<strong>Glass Price:</strong> <span class="${priceClass}">${priceText}</span>`;
-                                div.appendChild(price);
-
-                                const score = document.createElement('p');
-                                score.innerHTML = `<strong>Preference Score:</strong> ${opening.preference_score !== undefined ? opening.preference_score : 'N/A'}`;
-                                div.appendChild(score);
-
-                                openingsList.appendChild(div);
-                            });
-                        } else {
-                            // Assume no results match if empty array
-                             const noOpening = document.createElement('p');
-                             noOpening.textContent = 'No highly preferred rare openings available matching your selected preferences and schedule.';
-                             openingsList.appendChild(noOpening);
-                        }
-                        // ---------------------------------------------------------------
-                    })
-                    .catch(error => {
-                        console.error('Fetch error:', error);
-                        loadingMessage.style.display = 'none';
-                        openingsList.innerHTML = ''; // Clear loading
-                        errorMessage.textContent = `Error loading recommendations: ${error.message}`;
-                        errorMessage.style.display = 'block';
-                    });
             }
 
-            // Event Listeners
-            applyButton.addEventListener('click', fetchRecommendations);
+            function displayMasterClasses(classes) {
+                 mcLoading.style.display = 'none';
+                 mcError.style.display = 'none';
+                 masterclassContent.querySelectorAll('.day-section').forEach(el => el.remove()); // Clear before adding
 
-            villeButton.addEventListener('click', function() {
-                // Set form elements to Ville's preferences
-                prefsForm.querySelectorAll('input[name="house"]').forEach(checkbox => {
-                    checkbox.checked = VILLE_PREFS.houses.includes(checkbox.value);
-                });
-                document.getElementById('size').value = VILLE_PREFS.size;
-                document.getElementById('older_than_year').value = VILLE_PREFS.older_than_year;
-                // Automatically apply after setting
-                fetchRecommendations();
-            });
+                 if (!classes || classes.length === 0) {
+                     mcError.textContent = 'No master classes found.';
+                     mcError.style.display = 'block'; // Use error display for info
+                     return;
+                 }
 
-            // Add listener for Clear button
-            clearButton.addEventListener('click', function() {
-                prefsForm.querySelectorAll('input[name="house"]').forEach(checkbox => {
-                    checkbox.checked = false;
-                });
-                document.getElementById('size').value = 'any';
-                document.getElementById('older_than_year').value = ''; // Clear the year
-                // Automatically apply after clearing
-                fetchRecommendations();
-            });
+                 const groupedByDay = classes.reduce((acc, mc) => {
+                     const day = mc.day || "Unknown Day";
+                     if (!acc[day]) acc[day] = [];
+                     acc[day].push(mc);
+                     return acc;
+                 }, {});
 
-            // Initial fetch on page load (using default/no preferences)
-            fetchRecommendations();
+                 const sortedDays = Object.keys(groupedByDay).sort((a, b) => {
+                     const order = { "Friday": 1, "Saturday": 2, "Unknown Day": 3 };
+                     return (order[a] || 99) - (order[b] || 99);
+                 });
+
+                 sortedDays.forEach(day => {
+                     const daySection = document.createElement('div');
+                     daySection.className = 'day-section';
+                     const dayHeading = document.createElement('h3');
+                     dayHeading.className = 'day-heading';
+                     dayHeading.textContent = day;
+                     daySection.appendChild(dayHeading);
+
+                     const ul = document.createElement('ul');
+                     ul.className = 'mc-list';
+                     const sortedClasses = groupedByDay[day].sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+
+                     sortedClasses.forEach(mc => {
+                         const li = document.createElement('li');
+                         li.className = 'mc-item';
+                         const checkbox = document.createElement('input');
+                         checkbox.type = 'checkbox';
+                         const identifier = mc.link || `${mc.presenter}-${mc.title}`;
+                         const safeIdentifier = identifier.replace(/[^a-zA-Z0-9-_]/g, '-');
+                         checkbox.value = identifier;
+                         checkbox.id = `mc-${safeIdentifier}`;
+                         checkbox.name = "attended_mc_id";
+
+                         const label = document.createElement('label');
+                         label.htmlFor = checkbox.id;
+                         label.appendChild(checkbox); // Checkbox inside label for better tap target
+                         label.appendChild(document.createTextNode(` ${mc.title || "Untitled Class"}`));
+
+                         const details = document.createElement('div');
+                         details.className = 'details';
+                         details.textContent = `${mc.time || 'Time N/A'} - ${mc.presenter || 'N/A'}`;
+
+                         li.appendChild(label);
+                         li.appendChild(details);
+                         ul.appendChild(li);
+                     });
+                     daySection.appendChild(ul);
+                     masterclassContent.appendChild(daySection); // Append each day section
+                 });
+                 // Add listener after population
+                 addPreferenceChangeListener(masterclassContent);
+            }
+
+
+            // --- Recommendation Fetching and Display ---
+            let isFetching = false; // Prevent concurrent fetches
+            async function fetchRecommendations() {
+                // <<< Log when fetchRecommendations starts >>>
+                console.log('fetchRecommendations called...');
+
+                if (isFetching) {
+                    console.log('...but already fetching, returning.');
+                    return; // Don't fetch if already fetching
+                }
+                isFetching = true;
+
+                recLoading.style.display = 'block';
+                recError.style.display = 'none';
+                recNoResults.style.display = 'none';
+                recommendationsContent.querySelectorAll('.opening').forEach(el => el.remove()); // Clear previous results
+
+                // Give UI time to update loading state
+                await new Promise(resolve => setTimeout(resolve, 50));
+
+                const formData = new FormData(); // Create new FormData
+
+                // Collect preferences from the #preferences-tab-content
+                const houseCheckboxes = houseListContainer.querySelectorAll('input[name="house"]:checked');
+                houseCheckboxes.forEach(cb => formData.append('house', cb.value));
+
+                formData.append('size', sizeSelect.value);
+                if (olderThanInput.value) {
+                    formData.append('older_than_year', olderThanInput.value);
+                }
+
+                // Collect selected master classes from #masterclass-tab-content
+                const mcCheckboxes = masterclassContent.querySelectorAll('input[name="attended_mc_id"]:checked');
+                mcCheckboxes.forEach(cb => formData.append('attended_mc_id', cb.value));
+
+
+                const params = new URLSearchParams(formData);
+                console.log("Fetching with params:", params.toString());
+
+                try {
+                    const response = await fetch(`/api/next-opening?${params.toString()}`);
+                    recLoading.style.display = 'none';
+
+                    if (!response.ok) {
+                        let errorText = `Error: ${response.status}`;
+                        try {
+                            const errorData = await response.json();
+                            errorText += ` - ${errorData.error || errorData.message || 'Unknown API error'}`;
+                        } catch (e) {}
+                        throw new Error(errorText);
+                    }
+                    const data = await response.json();
+                    if (data.error) throw new Error(data.error + (data.details ? ` ${data.details}` : ''));
+
+                    // <<< Log the received data structure >>>
+                    console.log('Data received by displayOpenings:', JSON.stringify(data));
+
+                    displayOpenings(data);
+
+                } catch (error) {
+                    console.error('Error fetching recommendations:', error);
+                    recLoading.style.display = 'none';
+                    recError.textContent = `Could not load recommendations: ${error.message}`;
+                    recError.style.display = 'block';
+                } finally {
+                     isFetching = false; // Allow fetching again
+                }
+            }
+
+            function displayOpenings(openings) {
+                 recLoading.style.display = 'none';
+                 recError.style.display = 'none';
+                 recNoResults.style.display = 'none';
+                 // Clear previous results more directly
+                 recommendationsContent.innerHTML = '';
+
+                 if (openings.message) {
+                     // Create and append the no-results message element if needed
+                     const noResultsDiv = document.createElement('div');
+                     noResultsDiv.className = 'no-results';
+                     noResultsDiv.textContent = openings.message;
+                     recommendationsContent.appendChild(noResultsDiv);
+                     // recNoResults.textContent = openings.message;
+                     // recNoResults.style.display = 'block';
+                 } else if (Array.isArray(openings) && openings.length > 0) {
+                     // Formatters for concise date/time
+                     const dayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'short' }); // e.g., "Fri"
+                     const timeFormatter = new Intl.DateTimeFormat('en-US', { 'hour': '2-digit', 'minute': '2-digit', 'hour12': false }); // e.g., "14:30" (Added quotes around keys)
+
+                     openings.forEach(opening => {
+                         const div = document.createElement('div');
+                         div.className = 'opening card';
+                         const time = new Date(opening.time);
+                         let formattedTime = "Invalid Date";
+                         if (!isNaN(time)) { // Check if date is valid
+                            formattedTime = `${dayFormatter.format(time)} ${timeFormatter.format(time)}`;
+                         }
+
+                         // Use more structured HTML with specific classes matching the CSS
+                         div.innerHTML = `
+                             <div class="rec-name">${opening.name || 'Unnamed Champagne'}</div>
+                             <div class="rec-time">${formattedTime}</div>
+                             <div class="rec-details">
+                                 <span>Stand: ${opening.stand || 'N/A'}</span>
+                                 <span>${opening.glass_price !== null && opening.glass_price !== undefined ? `Glass: ${opening.glass_price}€` : '<span class="price-na">Glass: N/A</span>'}</span>
+                                 <span class="score">Score: ${opening.preference_score !== null && opening.preference_score !== undefined ? opening.preference_score : 'N/A'}</span>
+                             </div>
+                         `;
+                         // <<< Log the generated HTML for the specific problematic item >>>
+                         if (opening.name && opening.name.includes("Palmer & Co Collection Vintage 1985 Magnum")) {
+                             console.log('Generated HTML for Palmer 1985:', div.innerHTML);
+                         }
+                         recommendationsContent.appendChild(div);
+                     });
+                 } else {
+                     recNoResults.textContent = 'No highly preferred openings match your criteria.';
+                     recNoResults.style.display = 'block';
+                 }
+            }
+
+             // --- Preference Application Logic ---
+            function applyVillePrefs(fetch = true) {
+                 clearAllPrefs(false); // Clear without fetching yet
+
+                 const houseCheckboxes = houseListContainer.querySelectorAll('input[name="house"]');
+                 houseCheckboxes.forEach(cb => {
+                     cb.checked = VILLE_PREFS.houses.includes(cb.value);
+                 });
+                 sizeSelect.value = VILLE_PREFS.size;
+                 olderThanInput.value = VILLE_PREFS.older_than_year;
+
+                 // Ensure MCs are cleared
+                 masterclassContent.querySelectorAll('input[name="attended_mc_id"]').forEach(cb => cb.checked = false);
+
+                 if (fetch) {
+                    fetchRecommendations(); // Fetch with new defaults
+                 }
+             }
+
+            function clearAllPrefs(fetch = true) {
+                 // Clear form elements in preferences tab
+                 houseListContainer.querySelectorAll('input[name="house"]').forEach(cb => cb.checked = false);
+                 sizeSelect.value = 'any';
+                 olderThanInput.value = '';
+
+                 // Clear checkboxes in masterclass tab
+                 masterclassContent.querySelectorAll('input[name="attended_mc_id"]').forEach(cb => cb.checked = false);
+
+                 if (fetch) {
+                    fetchRecommendations(); // Fetch with cleared preferences
+                 }
+             }
+
+             // --- Event Listeners ---
+             villePrefsBtn.addEventListener('click', () => applyVillePrefs(true));
+             clearPrefsBtn.addEventListener('click', () => clearAllPrefs(true));
+
+             // Listener for changes in preferences or masterclasses to auto-refresh
+             function addPreferenceChangeListener(container) {
+                 container.addEventListener('change', function(event) {
+                     // Check if the change occurred on a form element we care about
+                     if (event.target.matches('input[type="checkbox"], select, input[type="number"]')) {
+                         // <<< Log when the listener fires >>>
+                         console.log('Preference change detected on:', event.target);
+                         console.log('Preference changed, fetching recommendations...');
+                         fetchRecommendations();
+                     }
+                 });
+             }
+             // Add initial listeners
+             addPreferenceChangeListener(prefsForm); // Catches size, year
+             // Listeners for house list and MC list are added *after* they are populated
+
+             // <<< Add listener for House Search Filter >>>
+             houseSearchInput.addEventListener('input', function() {
+                 const searchTerm = houseSearchInput.value.toLowerCase();
+                 const labels = houseListContainer.querySelectorAll('label');
+                 labels.forEach(label => {
+                     const houseName = label.textContent.trim().toLowerCase();
+                     if (houseName.includes(searchTerm)) {
+                         label.style.display = 'flex'; // Show matching labels (using flex as defined in CSS)
+                     } else {
+                         label.style.display = 'none';  // Hide non-matching labels
+                     }
+                 });
+             });
+
+             // --- Initial Load ---
+             fetchMasterClasses(); // Fetch MC list
+
+             // <<< Apply Ville Defaults to the form initially, without fetching yet >>>
+             applyVillePrefs(false);
+
+             // Recommendations are fetched automatically when MC list load finishes OR if it fails
+             // OR if initial houses are populated. Add a fallback just in case.
+             // This fetch will now use the applied Ville Defaults.
+             setTimeout(() => {
+                 if (!isFetching) { // Only fetch if not already triggered by MC load
+                     fetchRecommendations();
+                 }
+             }, 500); // Small delay to allow MC/House loading
+
+             // <<< Add a timer to refresh recommendations periodically (e.g., every 2 minutes) >>>
+             setInterval(fetchRecommendations, 120000); // 120000 ms = 2 minutes
+
         });
     </script>
 </body>

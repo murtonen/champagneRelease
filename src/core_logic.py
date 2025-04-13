@@ -268,179 +268,152 @@ def extract_year_from_name(name):
 
 # --- Core Filtering/Ranking Logic ---
 def find_next_rare_opening(all_data, current_time=None, dynamic_preferences=None):
-    """
-    Finds the next highly preferred rare openings based on schedule, tastings,
-    and preferences (either from file or dynamically provided).
-
-    Args:
-        all_data (dict): Dictionary containing all loaded data (schedule, wines, etc.).
-        current_time (datetime, optional): The reference time. Defaults to now().
-        dynamic_preferences (dict, optional): Preferences provided dynamically,
-                                              overriding file preferences if present.
-                                              Expected keys: 'houses', 'sizes', 'older_than_year'.
-    Returns:
-        list: A list of up to 3 recommended opening dictionaries, or None.
-    """
+    """Finds the next available rare opening based on schedule and preferences."""
     if current_time is None:
         current_time = datetime.now()
+    print(f"Finding next opening based on current time: {current_time}")
 
-    # Load data from the main dictionary
-    rare_schedule = all_data["rare_schedule"]
-    wine_details = all_data["wine_details"]
-    house_names = all_data["house_names"]
-    tasting_slots = all_data["tasting_slots"]
-    tasted_champagnes = all_data["tasted_champagnes"]
+    rare_schedule = all_data.get("rare_schedule", [])
+    wine_details = all_data.get("wine_details", {})
+    house_names = all_data.get("house_names", set())
+    tasting_slots = all_data.get("tasting_slots", [])
+    tasted_champagnes = all_data.get("tasted_champagnes", set())
+    base_preferences = all_data.get("preferences", {})
 
-    # --- Determine which preferences to use --- #
+    # Create effective preferences for THIS request, starting with base
+    effective_preferences = base_preferences.copy()
     if dynamic_preferences:
-        preferences = dynamic_preferences
-        print("Using dynamic preferences from API")  # Optional log
-    else:
-        preferences = all_data["preferences"]
-        print("Using preferences from file")  # Optional log
-    # ----------------------------------------- #
+        effective_preferences.update(dynamic_preferences)  # Update the local copy
 
-    # Prepare preference sets/values for efficient lookup
-    pref_houses_lower = {h.lower() for h in preferences.get("houses", [])}
-    # Handle size preference (dynamic 'sizes' might be pre-expanded)
-    pref_sizes_lower = {s.lower() for s in preferences.get("sizes", [])}
-    pref_older_than = preferences.get("older_than_year")
+    # --- Combine tasted and excluded wines --- #
+    all_excluded_wines = set(tasted_champagnes)
+    dynamically_excluded = set(effective_preferences.get("excluded_wines", []))
+    if dynamically_excluded:
+        normalized_dynamic_excluded = {
+            normalize_name(wine) for wine in dynamically_excluded
+        }
+        all_excluded_wines.update(normalized_dynamic_excluded)
+    # -------------------------------------------- #
 
-    # -- DEBUG: Print first few house names ---
-    # print("DEBUG: First 10 identified house names:", file=sys.stderr)
-    # for i, house in enumerate(house_names):
-    #     if i >= 10:
-    #         break
-    #     print(f"  [{i}] {house}", file=sys.stderr)
-    # print("---", file=sys.stderr)
-    # -----------------------------------------
-
-    # Step 1: Combine schedule with prices and parse datetime
-    print("Step 1: Combining schedule with prices...")
-    combined_schedule = []
+    # --- Pre-process schedule: Add datetime objects --- #
+    processed_schedule = []
     for item in rare_schedule:
         try:
+            # Combine date and time strings and parse into datetime
             opening_time = datetime.strptime(
                 f"{item['date']} {item['time']}", "%Y-%m-%d %H:%M"
             )
-            item["datetime"] = opening_time
-            # Find price
-            item["glass_price"] = find_price_for_rare_wine(
-                item["name"], wine_details, house_names
-            )
-            # Initialize score
-            item["preference_score"] = 0
-            combined_schedule.append(item)
-        except ValueError as e:
+            item["datetime"] = opening_time  # Add the datetime object
+            processed_schedule.append(item)
+        except (KeyError, ValueError) as e:
             print(
-                f"Warning: Skipping schedule item due to date/time parse error: {item}. Error: {e}"
+                f"Warning: Skipping schedule item due to missing/invalid date/time: {item}. Error: {e}",
+                file=sys.stderr,
             )
+            continue
+    # ------------------------------------------------- #
 
-    # Step 2: Filter out past openings
-    print(f"Step 2: Filtering out past openings (before {current_time})...")
-    future_openings = [
-        item for item in combined_schedule if item["datetime"] >= current_time
-    ]
-    print(f"   {len(future_openings)} openings remaining.")
+    # --- Filtering Logic --- #
+    possible_openings = []
+    # Filter PROCESSED schedule for future openings
+    for opening in processed_schedule:
+        opening_time = opening["datetime"]  # Now this key exists
+        if opening_time > current_time:
+            # Check against tasting slots
+            is_free = True
+            for slot in tasting_slots:
+                if slot["start"] <= opening_time < slot["end"]:
+                    is_free = False
+                    break
+            if is_free:
+                # Normalize wine name from schedule for exclusion check
+                normalized_opening_name = normalize_name(opening.get("name"))
+                # Check if already tasted or excluded
+                if normalized_opening_name not in all_excluded_wines:
+                    possible_openings.append(opening)
 
-    # Step 3: Filter out openings conflicting with tasting slots
-    print("Step 3: Filtering out openings conflicting with tasting slots...")
-    available_slots = []
-    for item in future_openings:
-        conflict = False
-        for slot in tasting_slots:
-            # Check for overlap: (SlotStart <= ItemTime < SlotEnd)
-            if slot["start"] <= item["datetime"] < slot["end"]:
-                conflict = True
-                break
-        if not conflict:
-            available_slots.append(item)
-    print(f"   {len(available_slots)} openings remaining.")
-
-    # Step 4: Filter out openings with already tasted champagnes
-    print("Step 4: Filtering out openings with already tasted champagnes...")
-    # Normalize tasted names for comparison
-    tasted_champagnes_normalized = {normalize_name(name) for name in tasted_champagnes}
-    unique_openings = []
-    for item in available_slots:
-        normalized_opening_name = normalize_name(item["name"])
-        if normalized_opening_name not in tasted_champagnes_normalized:
-            unique_openings.append(item)
-    print(f"   {len(unique_openings)} openings remaining.")
-
-    # Step 5: Apply preference scoring (using the determined 'preferences')
-    print("Step 6: Applying basic preference scoring...")  # Renumbered step
-    scored_openings = []
-    for item in unique_openings:
-        score = 0
-        item_name_lower = item["name"].lower()
-
-        # Identify house for preference check (re-use logic from price match, slightly adapted)
-        matched_house = None
-        sorted_house_names = sorted(house_names, key=len, reverse=True)
-        for house in sorted_house_names:
-            house_lower = house.lower()
-            if item_name_lower.startswith(house_lower) and (
-                len(item["name"]) == len(house)
-                or not item_name_lower[len(house)].isalnum()
-            ):
-                matched_house = house
-                break
-
-        # 1. House Preference (Uses pref_houses_lower from determined preferences)
-        if matched_house and matched_house.lower() in pref_houses_lower:
-            score += 1
-
-        # 2. Size Preference (Uses pref_sizes_lower)
-        # Note: The API translates 'magnum' query param to the full list.
-        # If core logic needs to handle 'magnum' itself, add logic here.
-        for size in pref_sizes_lower:
-            if size in item_name_lower:
-                score += 1
-                break
-
-        # 3. Age Preference (Uses pref_older_than)
-        opening_year = extract_year_from_name(item["name"])
-        if opening_year and pref_older_than:
-            if opening_year <= pref_older_than:
-                score += 1
-
-        item["preference_score"] = score
-        scored_openings.append(item)
-
-    # Step 6: Sort remaining openings by time (primary) and score (secondary, descending)
-    print(
-        "Step 5: Sorting remaining openings by time..."
-    )  # Original step 5 is now just sorting
-    # Sort primarily by datetime, then by score descending (higher score is better for same time)
-    sorted_openings = sorted(
-        scored_openings, key=lambda x: (x["datetime"], -x["preference_score"])
-    )
-
-    # Step 7: Determine next HIGHLY PREFERRED opening(s) (Score >= 2)
-    print("Step 7: Determining next highly preferred opening(s) (Score >= 2)...")
-
-    # Filter for openings with score >= 2
-    highly_preferred_openings = [
-        item for item in sorted_openings if item["preference_score"] >= 2
-    ]
-
-    if not highly_preferred_openings:
+    if not possible_openings:
         print(
-            "No further rare openings available matching your schedule and high preference (Score >= 2)."
+            "No future rare openings available or free after schedule/tasting/exclusion checks."
         )
-        # Optional: Fallback to showing the next chronological opening regardless of score?
-        # if sorted_openings:
-        #     print("Showing the next chronological opening instead:")
-        #     next_opening_time = sorted_openings[0]["datetime"]
-        #     next_openings_at_time = [
-        #         item for item in sorted_openings if item["datetime"] == next_opening_time
-        #     ]
-        #     return next_openings_at_time # Return original next regardless of score
-        return None  # Return None if no highly preferred options found
+        return []
 
-    # Return up to the first 3 highly preferred openings
-    return highly_preferred_openings[:3]
+    # --- Apply Preferences and Score --- #
+    scored_openings = []
+    for opening in possible_openings:
+        preference_score = 0
+        opening_house = None
+        opening_name_lower = opening.get("name", "").lower()
+
+        # Find house (consider caching or pre-processing this)
+        for house in house_names:
+            house_lower = house.lower()
+            if opening_name_lower.startswith(house_lower) and (
+                len(opening.get("name", "")) == len(house)
+                or not opening_name_lower[len(house)].isalnum()
+            ):
+                opening_house = house
+                break
+        opening["house"] = opening_house
+
+        # Extract size from name for scoring
+        opening_size = None
+        size_patterns = {
+            "magnum": ["magnum"],
+            "jeroboam": ["jeroboam"],
+            "methuselah": ["methuselah"],
+            "nabuchodonosor": ["nabuchodonosor"],
+        }  # Define sizes recognized for scoring
+        for size_key, patterns in size_patterns.items():
+            for pattern in patterns:
+                if f" {pattern}" in opening_name_lower:  # Check with space prefix
+                    opening_size = size_key
+                    break
+            if opening_size:
+                break
+
+        # --- Use effective_preferences for scoring --- #
+
+        # 1. House Preference (+1)
+        pref_houses = effective_preferences.get(
+            "houses", []
+        )  # Use effective_preferences
+        if pref_houses and opening_house and opening_house in pref_houses:
+            preference_score += 1
+            # print(f"DEBUG Score: +1 House match ({opening_house}) for '{opening['name']}'")
+
+        # 2. Size Preference (+1)
+        pref_sizes = effective_preferences.get("sizes", [])  # Use effective_preferences
+        if pref_sizes and opening_size and opening_size in pref_sizes:
+            preference_score += 1
+            # print(f"DEBUG Score: +1 Size match ({opening_size}) for '{opening['name']}'")
+
+        # 3. Age Preference (+1)
+        pref_older_than_year = effective_preferences.get(
+            "older_than_year"
+        )  # Use effective_preferences
+        if pref_older_than_year:
+            extracted_year = extract_year_from_name(opening.get("name"))
+            if extracted_year and extracted_year <= pref_older_than_year:
+                preference_score += 1
+                # print(f"DEBUG Score: +1 Age match ({extracted_year} <= {pref_older_than_year}) for '{opening['name']}'")
+        # -------------------------------------------- #
+
+        # Add glass price info
+        opening["glass_price"] = find_price_for_rare_wine(
+            opening.get("name"), wine_details, house_names
+        )
+        opening["preference_score"] = preference_score
+
+        if preference_score >= 2:
+            scored_openings.append(opening)
+
+    # --- Sort Results --- #
+    # Sort primarily by datetime (ascending), secondarily by score (descending)
+    scored_openings.sort(key=lambda x: (x["datetime"], -x["preference_score"]))
+
+    # Return top 3
+    return scored_openings[:3]
 
 
 if __name__ == "__main__":

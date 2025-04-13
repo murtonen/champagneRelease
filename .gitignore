@@ -41,3 +41,6 @@ __pycache__/
 .webassets-cache/
 instance/
 .flask_env
+
+# Scraped files
+master_class*
