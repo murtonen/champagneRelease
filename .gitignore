@@ -1,0 +1,33 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment variables
+.env
+
+# Virtual environment
+venv/
+ENV/
+env/
+.venv/
+
+# VS Code / Cursor settings
+.vscode/
+
+# Logs and junk
+*.log
+*.swp
+*.bak
+.DS_Store
+
+# Test results
+htmlcov/
+coverage.xml
+.cache/
+.pytest_cache/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
