@@ -55,8 +55,8 @@ def normalize_name(name):
     name = name.lower()
     # Remove specific patterns like (base YYYY)
     name = re.sub(r"\(base \d{4}\)", "", name)
-    # Remove trailing asterisk often found in price list
-    name = name.rstrip("*").strip()
+    # Remove trailing asterisk if it's the VERY last character
+    # name = name.rstrip("*").strip() # We handle '*' below now
     # Remove only bottle sizes and 'nv'
     suffixes_to_remove = ["magnum", "jeroboam", "methuselah", "nabuchodonosor", "nv"]
 
@@ -68,6 +68,15 @@ def normalize_name(name):
     # Keep years and common descriptors
     # Remove extra whitespace that might have been introduced
     name = re.sub(r"\s+", " ", name).strip()
+
+    # --- Updated: Remove trailing asterisk and anything after it --- #
+    name = re.sub(r"\s*\*.*$", "", name).strip()
+    # ------------------------------------------------------------
+
+    # --- Remove Debug Print ---
+    # if "canard" in original_input.lower():
+    #     print(f"DEBUG NORMALIZE: Input='{original_input}' -> Output='{name}'", file=sys.stderr)
+    # -------------------------
     return name
 
 
@@ -102,22 +111,25 @@ def find_price_for_rare_wine(rare_wine_name, wine_details, house_names):
             break  # Found the longest matching house
 
     if not matched_house or not specific_wine_part:
-        # Print error only if specifically debugging the target wines
-        if rare_wine_name in [
-            "Lombard Vintage 2008",
-            "Leclaire-Thiefaine Cuvée 03 Grand Cru de Cramant 2020",
-        ]:
-            print(
-                f"DEBUG Price Match: Could not identify house for '{rare_wine_name}'",
-                file=sys.stderr,
-            )
+        # --- Remove specific debug block ---
+        # if rare_wine_name in [
+        #     "Lombard Vintage 2008",
+        #     "Leclaire-Thiefaine Cuvée 03 Grand Cru de Cramant 2020",
+        # ]:
+        #     print(
+        #         f"DEBUG Price Match: Could not identify house for '{rare_wine_name}'",
+        #         file=sys.stderr,
+        #     )
+        # ----------------------------------
         return None
 
-    # --- Enable Debug printing only for target wines ---
-    debug_this_wine = rare_wine_name in [
-        "Lombard Vintage 2008",
-        "Leclaire-Thiefaine Cuvée 03 Grand Cru de Cramant 2020",
-    ]
+    # --- Remove specific debug block ---
+    # debug_this_wine = rare_wine_name in [
+    #     "Lombard Vintage 2008",
+    #     "Leclaire-Thiefaine Cuvée 03 Grand Cru de Cramant 2020",
+    # ]
+    debug_this_wine = False  # Keep variable defined, but always false
+    # ----------------------------------
 
     if debug_this_wine:
         print(f"\nDEBUG Price Match Attempt for: '{rare_wine_name}'", file=sys.stderr)
@@ -128,11 +140,13 @@ def find_price_for_rare_wine(rare_wine_name, wine_details, house_names):
 
     normalized_specific_part = normalize_name(specific_wine_part)
     if not normalized_specific_part:
-        if debug_this_wine:
-            print(
-                f"  -> Failed to normalize specific part: '{specific_wine_part}'",
-                file=sys.stderr,
-            )
+        # --- Remove specific debug block ---
+        # if debug_this_wine:
+        #     print(
+        #         f"  -> Failed to normalize specific part: '{specific_wine_part}'",
+        #         file=sys.stderr,
+        #     )
+        # ----------------------------------
         return None
 
     # Filter wine_details to only include items from the matched house
@@ -143,41 +157,46 @@ def find_price_for_rare_wine(rare_wine_name, wine_details, house_names):
     }
 
     if not house_wines:
-        if debug_this_wine:
-            print(
-                f"  -> No wines found in price list for house '{matched_house}'",
-                file=sys.stderr,
-            )
+        # --- Remove specific debug block ---
+        # if debug_this_wine:
+        #     print(
+        #         f"  -> No wines found in price list for house '{matched_house}'",
+        #         file=sys.stderr,
+        #     )
+        # ----------------------------------
         return None
 
     # Prepare normalized names map ONLY for this house's wines
-    house_price_name_map = {
-        normalize_name(k[len(matched_house) :].strip()): k
-        for k in house_wines.keys()
-        if k
-    }
+    house_price_name_map = {}
+    for k in house_wines.keys():
+        if not k:
+            continue
+        specific_part = k[len(matched_house) :].strip()
+        normalized_key = normalize_name(specific_part)
+        house_price_name_map[normalized_key] = k
+
     normalized_house_price_names = list(house_price_name_map.keys())
 
-    # --- Enable Debug printing only for target wines ---
-    if debug_this_wine:
-        print(
-            f"  -> Searching '{normalized_specific_part}' against {len(normalized_house_price_names)} normalized names from house '{matched_house}'. Full list:",
-            file=sys.stderr,
-        )
-        # Remove the limit to show all names for the house during debug
-        for i, price_name in enumerate(normalized_house_price_names):
-            # if i >= 5:
-            #     break
-            print(f"     [{i}] '{price_name}'", file=sys.stderr)
+    # --- Remove specific debug block ---
+    # if debug_this_wine:
+    #     print(
+    #         f"  -> Searching '{normalized_specific_part}' against {len(normalized_house_price_names)} normalized names from house '{matched_house}'. Full list:",
+    #         file=sys.stderr,
+    #     )
+    #     for i, price_name in enumerate(normalized_house_price_names):
+    #         print(f"     [{i}] '{price_name}'", file=sys.stderr)
+    # ----------------------------------
 
     # 1. Try exact match on normalized specific parts within the house
     if normalized_specific_part in house_price_name_map:
         original_full_name = house_price_name_map[normalized_specific_part]
-        if debug_this_wine:
-            print(
-                f"  SUCCESS (Exact): Found exact normalized match '{normalized_specific_part}' for house '{matched_house}'",
-                file=sys.stderr,
-            )
+        # --- Remove specific debug block ---
+        # if debug_this_wine:
+        #     print(
+        #         f"  SUCCESS (Exact): Found exact normalized match '{normalized_specific_part}' for house '{matched_house}'",
+        #         file=sys.stderr,
+        #     )
+        # ----------------------------------
         return wine_details[original_full_name].get("glass_price")
 
     # 2. Try fuzzy matching on normalized specific parts within the house
@@ -196,15 +215,16 @@ def find_price_for_rare_wine(rare_wine_name, wine_details, house_names):
             top_matches = extracted_matches
             best_match_tuple = max(top_matches, key=lambda x: x[1])
 
-            # --- Enable Debug printing only for target wines ---
-            if debug_this_wine:
-                print(f"  -> Top Fuzzy Candidates (Score >= 60):", file=sys.stderr)
-                for match, score in sorted(
-                    top_matches, key=lambda x: x[1], reverse=True
-                )[:5]:
-                    print(f"     - '{match}' (Score: {score})", file=sys.stderr)
-        elif debug_this_wine:
-            print("  -> No fuzzy matches found above cutoff 60.", file=sys.stderr)
+            # --- Remove specific debug block ---
+            # if debug_this_wine:
+            #     print(f"  -> Top Fuzzy Candidates (Score >= 60):", file=sys.stderr)
+            #     for match, score in sorted(
+            #         top_matches, key=lambda x: x[1], reverse=True
+            #     )[:5]:
+            #         print(f"     - '{match}' (Score: {score})", file=sys.stderr)
+            # elif debug_this_wine:
+            #     print("  -> No fuzzy matches found above cutoff 60.", file=sys.stderr)
+            # ----------------------------------
 
     except Exception as e:
         print(
@@ -218,17 +238,21 @@ def find_price_for_rare_wine(rare_wine_name, wine_details, house_names):
         best_match_str, best_score = best_match_tuple
         if best_score >= SIMILARITY_THRESHOLD:
             original_full_name = house_price_name_map[best_match_str]
-            if debug_this_wine:
-                print(
-                    f"  SUCCESS (Fuzzy): Found fuzzy match '{best_match_str}' with score {best_score} >= {SIMILARITY_THRESHOLD}",
-                    file=sys.stderr,
-                )
+            # --- Remove specific debug block ---
+            # if debug_this_wine:
+            #     print(
+            #         f"  SUCCESS (Fuzzy): Found fuzzy match '{best_match_str}' with score {best_score} >= {SIMILARITY_THRESHOLD}",
+            #         file=sys.stderr,
+            #     )
+            # ----------------------------------
             return wine_details[original_full_name].get("glass_price")
-        elif debug_this_wine:
-            print(
-                f"  FAILURE: Best fuzzy match '{best_match_str}' score {best_score} < {SIMILARITY_THRESHOLD}",
-                file=sys.stderr,
-            )
+        # --- Remove specific debug block ---
+        # elif debug_this_wine:
+        #     print(
+        #         f"  FAILURE: Best fuzzy match '{best_match_str}' score {best_score} < {SIMILARITY_THRESHOLD}",
+        #         file=sys.stderr,
+        #     )
+        # ----------------------------------
 
     return None  # Price not found
 

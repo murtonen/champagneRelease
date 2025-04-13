@@ -210,6 +210,11 @@ def parse_wine_list(pdf_path="Material/Wine_list_2025.pdf"):
                         full_name = f"{current_house_name} {specific_name}"
                         full_name = re.sub(r"\s+", " ", full_name).strip()
 
+                        # --- Remove Debug Print ---
+                        # if "canard" in current_house_name.lower():
+                        #      print(f"DEBUG PARSER: Storing '{full_name}' under house '{current_house_name}'", file=sys.stderr)
+                        # -------------------------
+
                         # Store details
                         if full_name not in wine_details:
                             wine_details[full_name] = {
