@@ -1,4 +1,4 @@
-Flask
-pdfplumber
-thefuzz
-python-Levenshtein 
+Flask>=2.0
+pdfplumber>=0.10.0
+thefuzz>=0.20.0
+python-Levenshtein>=0.20.0 

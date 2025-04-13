@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand Champagne Helper</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 2em;
+            background-color: #f8f8f8;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background-color: #fff;
+            padding: 2em;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 1em;
+        }
+        h2 {
+            color: #555;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 0.3em;
+            margin-top: 1.5em;
+        }
+        .opening {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 1em;
+            margin-bottom: 1em;
+            background-color: #fdfdfd;
+        }
+        .opening p {
+            margin: 0.5em 0;
+        }
+        .opening strong {
+            color: #444;
+        }
+        #loading, #error {
+            text-align: center;
+            font-style: italic;
+            color: #888;
+            margin-top: 2em;
+        }
+        #error {
+            color: #c00;
+        }
+        .price-na {
+            color: #999;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Grand Champagne Helper</h1>
+        <h2>Next Highly Recommended Openings (Score >= 2)</h2>
+        <div id="openings-list">
+            <p id="loading">Loading recommendations...</p>
+            <p id="error" style="display: none;">Could not load recommendations.</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const openingsList = document.getElementById('openings-list');
+            const loadingMessage = document.getElementById('loading');
+            const errorMessage = document.getElementById('error');
+
+            fetch('/api/next-opening')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loadingMessage.style.display = 'none'; // Hide loading message
+                    openingsList.innerHTML = ''; // Clear loading/error messages
+
+                    if (data.message) {
+                        // Handle the "No openings available" message
+                        const noOpening = document.createElement('p');
+                        noOpening.textContent = data.message;
+                        openingsList.appendChild(noOpening);
+                    } else if (Array.isArray(data) && data.length > 0) {
+                        data.forEach(opening => {
+                            const div = document.createElement('div');
+                            div.className = 'opening';
+
+                            const name = document.createElement('h3');
+                            name.textContent = opening.name || 'N/A';
+                            div.appendChild(name);
+
+                            const time = document.createElement('p');
+                            let formattedTime = 'N/A';
+                            if (opening.time) {
+                                try {
+                                    const date = new Date(opening.time);
+                                    // Format as e.g., "Friday 16:30"
+                                    formattedTime = date.toLocaleTimeString('en-US', {
+                                        weekday: 'long',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: false // Use 24-hour format
+                                    });
+                                } catch (e) { /* Keep 'N/A' */ }
+                            }
+                            time.innerHTML = `<strong>Time:</strong> ${formattedTime}`;
+                            div.appendChild(time);
+
+                            const stand = document.createElement('p');
+                            stand.innerHTML = `<strong>Stand:</strong> ${opening.stand || 'N/A'}`;
+                            div.appendChild(stand);
+
+                            const price = document.createElement('p');
+                            let priceText = 'N/A';
+                            let priceClass = 'price-na';
+                            if (opening.glass_price && opening.glass_price !== 'N/A') {
+                                priceText = `${opening.glass_price}€`;
+                                priceClass = '';
+                            } else if (opening.glass_price === 'N/A' || opening.glass_price === null) {
+                                priceText = 'N/A';
+                            }
+                            price.innerHTML = `<strong>Glass Price:</strong> <span class="${priceClass}">${priceText}</span>`;
+                            div.appendChild(price);
+
+                            const score = document.createElement('p');
+                            score.innerHTML = `<strong>Preference Score:</strong> ${opening.preference_score !== undefined ? opening.preference_score : 'N/A'}`;
+                            div.appendChild(score);
+
+                            openingsList.appendChild(div);
+                        });
+                    } else {
+                        // Unexpected empty array or non-array data
+                        throw new Error('Invalid data format received.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    loadingMessage.style.display = 'none';
+                    errorMessage.textContent = `Error loading recommendations: ${error.message}`;
+                    errorMessage.style.display = 'block';
+                });
+        });
+    </script>
+</body>
+</html> 

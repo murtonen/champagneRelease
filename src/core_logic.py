@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import re
 import sys
+import os
 
 # Import the fuzzy matching library
 from thefuzz import process, fuzz
@@ -14,28 +15,36 @@ from .data_parser import (
 )
 
 
-def load_all_data(
-    rare_schedule_path="Material/Rare_schedule_2025.pdf",
-    wine_list_path="Material/Wine_list_2025.pdf",
-    tastings_path="Material/tastings.txt",
-    preferences_path="Material/preferences.txt",
-):
-    """Loads all data by calling the respective parsers."""
+def load_all_data(material_dir):
+    """Loads all data from files within the specified directory."""
     print("Loading all data...")
-    rare_schedule = parse_rare_schedule(rare_schedule_path)
-    wine_details, house_names = parse_wine_list(wine_list_path)
-    tasting_slots, tasted_champagnes = parse_tastings(tastings_path)
-    preferences = parse_preferences(preferences_path)
-    print("Data loading complete.")
+    try:
+        # Construct full paths using the provided directory
+        rare_schedule_path = os.path.join(material_dir, "Rare_schedule_2025.pdf")
+        wine_list_path = os.path.join(material_dir, "Wine_list_2025.pdf")
+        tastings_path = os.path.join(material_dir, "tastings.txt")
+        preferences_path = os.path.join(material_dir, "preferences.txt")
 
-    return {
-        "rare_schedule": rare_schedule,
-        "wine_details": wine_details,
-        "house_names": house_names,
-        "tasting_slots": tasting_slots,
-        "tasted_champagnes": tasted_champagnes,
-        "preferences": preferences,
-    }
+        rare_schedule = parse_rare_schedule(rare_schedule_path)
+        wine_details, house_names = parse_wine_list(wine_list_path)
+        tasting_slots, tasted_champagnes = parse_tastings(tastings_path)
+        preferences = parse_preferences(preferences_path)
+        print("Data loading complete.")
+
+        return {
+            "rare_schedule": rare_schedule,
+            "wine_details": wine_details,
+            "house_names": house_names,
+            "tasting_slots": tasting_slots,
+            "tasted_champagnes": tasted_champagnes,
+            "preferences": preferences,
+        }
+    except FileNotFoundError as e:
+        print(f"Error loading data: Input file not found. {e}", file=sys.stderr)
+        raise  # Re-raise the exception to be caught by the caller (app.py)
+    except Exception as e:
+        print(f"An unexpected error occurred during data loading: {e}", file=sys.stderr)
+        raise  # Re-raise
 
 
 # --- Helper function for name normalization ---

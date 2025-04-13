@@ -31,3 +31,13 @@ coverage.xml
 build/
 dist/
 *.egg-info/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Flask cache
+.webassets-cache/
+instance/
+.flask_env
