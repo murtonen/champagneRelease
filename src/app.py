@@ -1,6 +1,6 @@
 import os
 import sys
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 from datetime import datetime
 
 # Ensure the src directory is in the Python path
@@ -47,16 +47,24 @@ load_data_if_needed()
 @app.route("/")
 def index():
     """Serves the main HTML page."""
-    # Check if data loaded correctly on startup, pass info to template?
-    # For now, just render the template, JS will handle API call.
-    return render_template("index.html")
+    # Ensure data is loaded for house list
+    load_data_if_needed()
+    house_list = []
+    if ALL_DATA and "house_names" in ALL_DATA:
+        house_list = sorted(list(ALL_DATA["house_names"]))  # Pass sorted list
+
+    # Pass error status too, so template can show message if data failed
+    data_load_error = DATA_LOAD_ERROR
+
+    return render_template(
+        "index.html", houses=house_list, data_load_error=data_load_error
+    )
 
 
 # --- API Endpoints ---
 @app.route("/api/next-opening", methods=["GET"])
 def get_next_opening():
     """API endpoint to get the next highly recommended rare opening(s)."""
-    # Ensure data is loaded (it might have failed on startup)
     load_data_if_needed()
 
     if DATA_LOAD_ERROR:
@@ -64,23 +72,57 @@ def get_next_opening():
             jsonify({"error": "Data loading failed", "details": DATA_LOAD_ERROR}),
             500,
         )
-
     if not ALL_DATA:
-        # This case should ideally be covered by DATA_LOAD_ERROR
         return jsonify({"error": "Data not loaded"}), 500
 
+    # --- Parse Preferences from Query Parameters --- #
+    dynamic_preferences = {}
+    pref_houses = request.args.getlist("house")  # Use getlist for multiple values
+    if pref_houses:
+        dynamic_preferences["houses"] = pref_houses
+
+    pref_size = request.args.get("size")
+    if pref_size:
+        # Translate 'magnum' query param to list expected by core logic
+        if pref_size == "magnum":
+            dynamic_preferences["sizes"] = [
+                "magnum",
+                "jeroboam",
+                "methuselah",
+                "nabuchodonosor",
+            ]
+        # Add other size mappings if UI offers more options
+        # else:
+        #    dynamic_preferences['sizes'] = [pref_size]
+
+    pref_older_than = request.args.get("older_than")
+    if pref_older_than:
+        try:
+            dynamic_preferences["older_than_year"] = int(pref_older_than)
+        except ValueError:
+            return (
+                jsonify({"error": "Invalid year format for older_than parameter."}),
+                400,
+            )
+    # -------------------------------------------- #
+
     current_time = datetime.now()
-    next_openings = find_next_rare_opening(ALL_DATA, current_time)
+
+    # --- Pass dynamic preferences to core logic --- #
+    next_openings = find_next_rare_opening(
+        ALL_DATA,
+        current_time,
+        dynamic_preferences=dynamic_preferences if dynamic_preferences else None,
+    )
+    # --------------------------------------------- #
 
     if not next_openings:
-        return (
-            jsonify(
-                {
-                    "message": "No highly preferred rare openings available matching your schedule."
-                }
-            ),
-            200,
+        # Message depends on whether preferences were applied
+        message = (
+            "No highly preferred rare openings available matching your schedule"
+            + (" and selected preferences." if dynamic_preferences else ".")
         )
+        return jsonify({"message": message}), 200
 
     # Format the response according to API design
     response_data = []

@@ -19,6 +19,41 @@
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
+        .main-content {
+            display: flex;
+            gap: 2em; /* Space between columns */
+        }
+        .preferences {
+            flex: 0 0 35%; /* Fixed width for preferences column */
+            /* Alternatively: width: 35%; */
+            border-right: 1px solid #eee;
+            padding-right: 2em;
+        }
+        .preferences h2 {
+             margin-top: 0; /* Align heading */
+        }
+        .results-section {
+            flex-grow: 1; /* Takes remaining space */
+        }
+        .checkbox-group {
+            max-height: 400px; /* Limit height and allow scroll */
+            overflow-y: auto;
+            border: 1px solid #eee;
+            padding: 0.5em;
+            margin-top: 0.5em;
+        }
+        .checkbox-group label {
+            display: block; /* Ensure each label is on its own line */
+            margin-bottom: 0.3em;
+        }
+        .pref-group {
+            margin-bottom: 1em;
+        }
+        .button-group button {
+            margin-right: 0.5em;
+            padding: 0.5em 1em;
+            cursor: pointer;
+        }
         h1 {
             color: #333;
             text-align: center;
@@ -56,99 +91,230 @@
             color: #999;
             font-style: italic;
         }
+        /* Style number input to match select */
+        input[type="number"],
+        select {
+            padding: 0.4em;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: inherit; /* Make font same as body */
+            width: 100px; /* Adjust width as needed */
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Grand Champagne Helper</h1>
-        <h2>Next Highly Recommended Openings (Score >= 2)</h2>
-        <div id="openings-list">
-            <p id="loading">Loading recommendations...</p>
-            <p id="error" style="display: none;">Could not load recommendations.</p>
+
+        <div class="main-content">
+            <!-- Preferences Section -->
+            <div class="preferences">
+                <h2>Preferences</h2>
+                {% if data_load_error %}
+                    <p class="error">Error loading data: {{ data_load_error }}. Cannot set preferences.</p>
+                {% else %}
+                <form id="preferences-form">
+                    <div class="pref-group">
+                        <label>Houses (Select all that apply):</label>
+                        <div class="checkbox-group">
+                            {% for house in houses %}
+                            <label><input type="checkbox" name="house" value="{{ house }}"> {{ house }}</label>
+                            {% else %}
+                            <p>Could not load house list.</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="pref-group">
+                        <label for="size">Bottle Size:</label>
+                        <select name="size" id="size">
+                            <option value="any" selected>Any</option>
+                            <option value="magnum">Magnum+</option>
+                            <!-- Add more specific sizes if needed -->
+                        </select>
+                    </div>
+
+                    <div class="pref-group">
+                        <label for="older_than_year">Older than Year (e.g., 1990):</label>
+                        <input type="number" name="older_than_year" id="older_than_year" min="1900" max="2025">
+                    </div>
+
+                    <div class="button-group">
+                        <button type="button" id="apply-prefs">Apply Preferences</button>
+                        <button type="button" id="ville-prefs">Ville Defaults</button>
+                        <button type="button" id="clear-prefs">Clear All</button>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+            <!-- End Preferences Section -->
+
+            <!-- Results Section -->
+            <div class="results-section">
+                <h2>Next Highly Recommended Openings (Score >= 2)</h2>
+                <div id="openings-list">
+                    <p id="loading">Loading recommendations...</p>
+                    <p id="error" style="display: none;">Could not load recommendations.</p>
+                </div>
+            </div>
+            <!-- End Results Section -->
         </div>
     </div>
 
     <script>
+        // --- Ville's Preferences (Defaults) ---
+        const VILLE_PREFS = {
+            houses: ["Bollinger", "Charles Heidsieck", "Palmer"],
+            size: "magnum", // Represents Magnum+
+            older_than_year: 1990
+        };
+        // ----------------------------------------
+
         document.addEventListener('DOMContentLoaded', function() {
             const openingsList = document.getElementById('openings-list');
             const loadingMessage = document.getElementById('loading');
             const errorMessage = document.getElementById('error');
+            const applyButton = document.getElementById('apply-prefs');
+            const villeButton = document.getElementById('ville-prefs');
+            const clearButton = document.getElementById('clear-prefs');
+            const prefsForm = document.getElementById('preferences-form');
 
-            fetch('/api/next-opening')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    loadingMessage.style.display = 'none'; // Hide loading message
-                    openingsList.innerHTML = ''; // Clear loading/error messages
+            function fetchRecommendations() {
+                errorMessage.style.display = 'none'; // Clear previous errors
+                loadingMessage.style.display = 'block';
+                openingsList.innerHTML = ''; // Clear previous results
+                openingsList.appendChild(loadingMessage); // Put loading back
 
-                    if (data.message) {
-                        // Handle the "No openings available" message
-                        const noOpening = document.createElement('p');
-                        noOpening.textContent = data.message;
-                        openingsList.appendChild(noOpening);
-                    } else if (Array.isArray(data) && data.length > 0) {
-                        data.forEach(opening => {
-                            const div = document.createElement('div');
-                            div.className = 'opening';
+                // Collect preferences from form
+                const formData = new FormData(prefsForm);
+                const params = new URLSearchParams();
 
-                            const name = document.createElement('h3');
-                            name.textContent = opening.name || 'N/A';
-                            div.appendChild(name);
+                formData.getAll('house').forEach(h => params.append('house', h));
+                if (formData.get('size') && formData.get('size') !== 'any') {
+                    // Backend will need to know 'magnum' means magnum and larger
+                    params.append('size', formData.get('size'));
+                }
+                if (formData.get('older_than_year')) {
+                    params.append('older_than', formData.get('older_than_year'));
+                }
 
-                            const time = document.createElement('p');
-                            let formattedTime = 'N/A';
-                            if (opening.time) {
-                                try {
-                                    const date = new Date(opening.time);
-                                    // Format as e.g., "Friday 16:30"
-                                    formattedTime = date.toLocaleTimeString('en-US', {
-                                        weekday: 'long',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        hour12: false // Use 24-hour format
-                                    });
-                                } catch (e) { /* Keep 'N/A' */ }
-                            }
-                            time.innerHTML = `<strong>Time:</strong> ${formattedTime}`;
-                            div.appendChild(time);
+                const queryString = params.toString();
+                const apiUrl = `/api/next-opening${queryString ? '?' + queryString : ''}`;
+                console.log("Fetching:", apiUrl); // Log the URL being fetched
 
-                            const stand = document.createElement('p');
-                            stand.innerHTML = `<strong>Stand:</strong> ${opening.stand || 'N/A'}`;
-                            div.appendChild(stand);
+                fetch(apiUrl)
+                    .then(response => {
+                        if (!response.ok) {
+                            // Try to get error details from response body
+                            return response.json().then(errData => {
+                                throw new Error(`HTTP error ${response.status}: ${errData.error || response.statusText}`);
+                            }).catch(() => {
+                                // Fallback if response body is not JSON or empty
+                                throw new Error(`HTTP error! Status: ${response.status}`);
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        loadingMessage.style.display = 'none';
+                        openingsList.innerHTML = ''; // Clear loading message again
 
-                            const price = document.createElement('p');
-                            let priceText = 'N/A';
-                            let priceClass = 'price-na';
-                            if (opening.glass_price && opening.glass_price !== 'N/A') {
-                                priceText = `${opening.glass_price}€`;
-                                priceClass = '';
-                            } else if (opening.glass_price === 'N/A' || opening.glass_price === null) {
-                                priceText = 'N/A';
-                            }
-                            price.innerHTML = `<strong>Glass Price:</strong> <span class="${priceClass}">${priceText}</span>`;
-                            div.appendChild(price);
+                        if (data.message) {
+                            // Handle the "No openings available" message
+                            const noOpening = document.createElement('p');
+                            noOpening.textContent = data.message;
+                            openingsList.appendChild(noOpening);
+                        } else if (Array.isArray(data) && data.length > 0) {
+                            data.forEach(opening => {
+                                const div = document.createElement('div');
+                                div.className = 'opening';
 
-                            const score = document.createElement('p');
-                            score.innerHTML = `<strong>Preference Score:</strong> ${opening.preference_score !== undefined ? opening.preference_score : 'N/A'}`;
-                            div.appendChild(score);
+                                const name = document.createElement('h3');
+                                name.textContent = opening.name || 'N/A';
+                                div.appendChild(name);
 
-                            openingsList.appendChild(div);
-                        });
-                    } else {
-                        // Unexpected empty array or non-array data
-                        throw new Error('Invalid data format received.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Fetch error:', error);
-                    loadingMessage.style.display = 'none';
-                    errorMessage.textContent = `Error loading recommendations: ${error.message}`;
-                    errorMessage.style.display = 'block';
+                                const time = document.createElement('p');
+                                let formattedTime = 'N/A';
+                                if (opening.time) {
+                                    try {
+                                        const date = new Date(opening.time);
+                                        formattedTime = date.toLocaleTimeString('en-US', {
+                                            weekday: 'long',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: false
+                                        });
+                                    } catch (e) { /* Keep 'N/A' */ }
+                                }
+                                time.innerHTML = `<strong>Time:</strong> ${formattedTime}`;
+                                div.appendChild(time);
+
+                                const stand = document.createElement('p');
+                                stand.innerHTML = `<strong>Stand:</strong> ${opening.stand || 'N/A'}`;
+                                div.appendChild(stand);
+
+                                const price = document.createElement('p');
+                                let priceText = 'N/A';
+                                let priceClass = 'price-na';
+                                if (opening.glass_price && opening.glass_price !== 'N/A') {
+                                    priceText = `${opening.glass_price}${typeof opening.glass_price === 'string' && !opening.glass_price.endsWith('€') ? '€' : ''}`;
+                                    priceClass = '';
+                                } else if (opening.glass_price === 'N/A' || opening.glass_price === null) {
+                                    priceText = 'N/A';
+                                }
+                                price.innerHTML = `<strong>Glass Price:</strong> <span class="${priceClass}">${priceText}</span>`;
+                                div.appendChild(price);
+
+                                const score = document.createElement('p');
+                                score.innerHTML = `<strong>Preference Score:</strong> ${opening.preference_score !== undefined ? opening.preference_score : 'N/A'}`;
+                                div.appendChild(score);
+
+                                openingsList.appendChild(div);
+                            });
+                        } else {
+                            // Assume no results match if empty array
+                             const noOpening = document.createElement('p');
+                             noOpening.textContent = 'No highly preferred rare openings available matching your selected preferences and schedule.';
+                             openingsList.appendChild(noOpening);
+                        }
+                        // ---------------------------------------------------------------
+                    })
+                    .catch(error => {
+                        console.error('Fetch error:', error);
+                        loadingMessage.style.display = 'none';
+                        openingsList.innerHTML = ''; // Clear loading
+                        errorMessage.textContent = `Error loading recommendations: ${error.message}`;
+                        errorMessage.style.display = 'block';
+                    });
+            }
+
+            // Event Listeners
+            applyButton.addEventListener('click', fetchRecommendations);
+
+            villeButton.addEventListener('click', function() {
+                // Set form elements to Ville's preferences
+                prefsForm.querySelectorAll('input[name="house"]').forEach(checkbox => {
+                    checkbox.checked = VILLE_PREFS.houses.includes(checkbox.value);
                 });
+                document.getElementById('size').value = VILLE_PREFS.size;
+                document.getElementById('older_than_year').value = VILLE_PREFS.older_than_year;
+                // Automatically apply after setting
+                fetchRecommendations();
+            });
+
+            // Add listener for Clear button
+            clearButton.addEventListener('click', function() {
+                prefsForm.querySelectorAll('input[name="house"]').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                document.getElementById('size').value = 'any';
+                document.getElementById('older_than_year').value = ''; // Clear the year
+                // Automatically apply after clearing
+                fetchRecommendations();
+            });
+
+            // Initial fetch on page load (using default/no preferences)
+            fetchRecommendations();
         });
     </script>
 </body>

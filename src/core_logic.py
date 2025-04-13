@@ -267,25 +267,42 @@ def extract_year_from_name(name):
 
 
 # --- Core Filtering/Ranking Logic ---
-def find_next_rare_opening(all_data, current_time=None):
+def find_next_rare_opening(all_data, current_time=None, dynamic_preferences=None):
     """
-    Combines data, filters based on time/tastings/preferences, and finds the next opening(s).
-    (Placeholder - Needs implementation)
+    Finds the next highly preferred rare openings based on schedule, tastings,
+    and preferences (either from file or dynamically provided).
+
+    Args:
+        all_data (dict): Dictionary containing all loaded data (schedule, wines, etc.).
+        current_time (datetime, optional): The reference time. Defaults to now().
+        dynamic_preferences (dict, optional): Preferences provided dynamically,
+                                              overriding file preferences if present.
+                                              Expected keys: 'houses', 'sizes', 'older_than_year'.
+    Returns:
+        list: A list of up to 3 recommended opening dictionaries, or None.
     """
     if current_time is None:
         current_time = datetime.now()
 
-    print(f"Finding next opening relative to: {current_time}")
-
+    # Load data from the main dictionary
     rare_schedule = all_data["rare_schedule"]
     wine_details = all_data["wine_details"]
     house_names = all_data["house_names"]
     tasting_slots = all_data["tasting_slots"]
     tasted_champagnes = all_data["tasted_champagnes"]
-    preferences = all_data["preferences"]
-    pref_houses_lower = {
-        h.lower() for h in preferences.get("houses", [])
-    }  # Lowercase set for efficient lookup
+
+    # --- Determine which preferences to use --- #
+    if dynamic_preferences:
+        preferences = dynamic_preferences
+        print("Using dynamic preferences from API")  # Optional log
+    else:
+        preferences = all_data["preferences"]
+        print("Using preferences from file")  # Optional log
+    # ----------------------------------------- #
+
+    # Prepare preference sets/values for efficient lookup
+    pref_houses_lower = {h.lower() for h in preferences.get("houses", [])}
+    # Handle size preference (dynamic 'sizes' might be pre-expanded)
     pref_sizes_lower = {s.lower() for s in preferences.get("sizes", [])}
     pref_older_than = preferences.get("older_than_year")
 
@@ -351,7 +368,7 @@ def find_next_rare_opening(all_data, current_time=None):
             unique_openings.append(item)
     print(f"   {len(unique_openings)} openings remaining.")
 
-    # Step 5: Apply preference scoring
+    # Step 5: Apply preference scoring (using the determined 'preferences')
     print("Step 6: Applying basic preference scoring...")  # Renumbered step
     scored_openings = []
     for item in unique_openings:
@@ -370,17 +387,19 @@ def find_next_rare_opening(all_data, current_time=None):
                 matched_house = house
                 break
 
-        # 1. House Preference
+        # 1. House Preference (Uses pref_houses_lower from determined preferences)
         if matched_house and matched_house.lower() in pref_houses_lower:
             score += 1
 
-        # 2. Size Preference
+        # 2. Size Preference (Uses pref_sizes_lower)
+        # Note: The API translates 'magnum' query param to the full list.
+        # If core logic needs to handle 'magnum' itself, add logic here.
         for size in pref_sizes_lower:
             if size in item_name_lower:
                 score += 1
-                break  # Only add score once per item even if multiple sizes match (e.g. Magnum Jeroboam)
+                break
 
-        # 3. Age Preference
+        # 3. Age Preference (Uses pref_older_than)
         opening_year = extract_year_from_name(item["name"])
         if opening_year and pref_older_than:
             if opening_year <= pref_older_than:
