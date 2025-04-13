@@ -67,6 +67,10 @@ This file captures key insights, assumptions, and structural details discovered 
         *   **Size Match (+1pt):** Check if the original `rare_wine_name` contains any of the bottle sizes listed in `preferences['sizes']` (case-insensitive).
         *   **Age Match (+1pt):** Extract the year (e.g., `Vintage YYYY`, `\d{4}`) from the `rare_wine_name`. If a year is found and `preferences['older_than_year']` is set, add point if `opening_year <= preferences['older_than_year']`.
     *   The final score is stored alongside the opening details.
+*   **Final Recommendation:**
+    *   After filtering and scoring, the list of openings is sorted primarily by time, secondarily by score (descending).
+    *   The list is then filtered to include only openings with `preference_score >= 2`.
+    *   The top 1-3 entries from this highly preferred list are returned as the recommendations.
 
 ## Open Questions / Potential Issues
 

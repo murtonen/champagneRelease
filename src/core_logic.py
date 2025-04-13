@@ -365,22 +365,30 @@ def find_next_rare_opening(all_data, current_time=None):
         scored_openings, key=lambda x: (x["datetime"], -x["preference_score"])
     )
 
-    # Step 7: Determine next opening(s)
-    print("Step 7: Determining next opening(s)...")
-    if not sorted_openings:
-        print("No further rare openings available matching your schedule.")
-        return None
+    # Step 7: Determine next HIGHLY PREFERRED opening(s) (Score >= 2)
+    print("Step 7: Determining next highly preferred opening(s) (Score >= 2)...")
 
-    # Find the time of the very first available opening
-    next_opening_time = sorted_openings[0]["datetime"]
-
-    # Get all openings that occur exactly at this next time
-    next_openings_at_time = [
-        item for item in sorted_openings if item["datetime"] == next_opening_time
+    # Filter for openings with score >= 2
+    highly_preferred_openings = [
+        item for item in sorted_openings if item["preference_score"] >= 2
     ]
 
-    # We already sorted by score descending for ties in time, so just return the list
-    return next_openings_at_time
+    if not highly_preferred_openings:
+        print(
+            "No further rare openings available matching your schedule and high preference (Score >= 2)."
+        )
+        # Optional: Fallback to showing the next chronological opening regardless of score?
+        # if sorted_openings:
+        #     print("Showing the next chronological opening instead:")
+        #     next_opening_time = sorted_openings[0]["datetime"]
+        #     next_openings_at_time = [
+        #         item for item in sorted_openings if item["datetime"] == next_opening_time
+        #     ]
+        #     return next_openings_at_time # Return original next regardless of score
+        return None  # Return None if no highly preferred options found
+
+    # Return up to the first 3 highly preferred openings
+    return highly_preferred_openings[:3]
 
 
 if __name__ == "__main__":

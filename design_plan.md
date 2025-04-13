@@ -70,6 +70,7 @@ The primary output should be the single next best opening, but if multiple highl
             -   Store the calculated score with the opening data.
         -   The result is a list of available, non-conflicting future rare openings, potentially ranked by preference. Identify the soonest one(s).
             -   **Sorting:** Keep sorting primarily by time to find the *next* opening. The score will be displayed.
+            -   **Final Selection:** Filter the sorted list to keep only openings with `preference_score >= 2`. Return the first 1-3 openings from this filtered list.
 
 ## 4. Technology Stack
 
