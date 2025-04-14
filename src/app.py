@@ -189,6 +189,8 @@ def get_next_opening():
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    # Note: debug=True is useful for development but should be False in production
-    # Run on all interfaces (0.0.0.0) to be accessible on the local network
-    app.run(host="0.0.0.0", debug=True)
+    # This block is for local testing ONLY.
+    # Production servers (Gunicorn, PythonAnywhere) will import the 'app' object directly.
+    # If you need to run locally for testing, you can temporarily add:
+    # app.run(host='0.0.0.0', debug=True, port=5000) # Use a specific port
+    pass  # Or just leave empty
