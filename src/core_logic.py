@@ -10,7 +10,6 @@ from thefuzz import process, fuzz
 from .data_parser import (
     parse_rare_schedule,
     parse_wine_list,
-    parse_tastings,
     parse_preferences,
 )
 
@@ -22,12 +21,10 @@ def load_all_data(material_dir):
         # Construct full paths using the provided directory
         rare_schedule_path = os.path.join(material_dir, "Rare_schedule_2025.pdf")
         wine_list_path = os.path.join(material_dir, "Wine_list_2025.pdf")
-        tastings_path = os.path.join(material_dir, "tastings.txt")
         preferences_path = os.path.join(material_dir, "preferences.txt")
 
         rare_schedule = parse_rare_schedule(rare_schedule_path)
         wine_details, house_names = parse_wine_list(wine_list_path)
-        tasting_slots, tasted_champagnes = parse_tastings(tastings_path)
         preferences = parse_preferences(preferences_path)
         print("Data loading complete.")
 
@@ -35,8 +32,6 @@ def load_all_data(material_dir):
             "rare_schedule": rare_schedule,
             "wine_details": wine_details,
             "house_names": house_names,
-            "tasting_slots": tasting_slots,
-            "tasted_champagnes": tasted_champagnes,
             "preferences": preferences,
         }
     except FileNotFoundError as e:
@@ -276,8 +271,6 @@ def find_next_rare_opening(all_data, current_time=None, dynamic_preferences=None
     rare_schedule = all_data.get("rare_schedule", [])
     wine_details = all_data.get("wine_details", {})
     house_names = all_data.get("house_names", set())
-    tasting_slots = all_data.get("tasting_slots", [])
-    tasted_champagnes = all_data.get("tasted_champagnes", set())
     base_preferences = all_data.get("preferences", {})
 
     # Create effective preferences for THIS request, starting with base
@@ -286,23 +279,18 @@ def find_next_rare_opening(all_data, current_time=None, dynamic_preferences=None
         effective_preferences.update(dynamic_preferences)  # Update the local copy
 
     # --- Combine tasted and excluded wines --- #
-    # Determine if we should ignore the personal tasted list
-    ignore_tasted = effective_preferences.get("ignore_tasted", False)
+    # Determine if we should ignore the MC wines
+    ignore_tasted_flag_from_prefs = effective_preferences.get("ignore_tasted", False)
 
     # Start with wines excluded dynamically (e.g., from selected MCs)
     final_excluded_wines = set()
     dynamically_excluded = set(effective_preferences.get("excluded_wines", []))
-    if dynamically_excluded:
+    # Only add the dynamically excluded (MC) wines if the flag is False
+    if dynamically_excluded and not ignore_tasted_flag_from_prefs:
         normalized_dynamic_excluded = {
             normalize_name(wine) for wine in dynamically_excluded
         }
         final_excluded_wines.update(normalized_dynamic_excluded)
-
-    # Add wines from personal tasting list ONLY if ignore_tasted is False
-    if not ignore_tasted:
-        final_excluded_wines.update(
-            tasted_champagnes
-        )  # tasted_champagnes is already normalized
 
     # -------------------------------------------- #
 
@@ -333,16 +321,9 @@ def find_next_rare_opening(all_data, current_time=None, dynamic_preferences=None
     for opening in processed_schedule:
         opening_time = opening["datetime"]  # Now this key exists
         if opening_time > current_time:
-            # Check against tasting slots AND attended MC slots
+            # Check ONLY against attended MC slots for time conflicts
             is_free = True
-            # Check personal tasting schedule
-            for slot in tasting_slots:
-                if slot["start"] <= opening_time < slot["end"]:
-                    is_free = False
-                    # print(f"DEBUG: {opening['name']} conflicts with tasting slot {slot}") # Optional debug
-                    break
-            # Check attended Master Classes if still free
-            if is_free and attended_mc_slots:
+            if attended_mc_slots:
                 for mc_slot in attended_mc_slots:
                     if mc_slot["start"] <= opening_time < mc_slot["end"]:
                         is_free = False
@@ -352,7 +333,7 @@ def find_next_rare_opening(all_data, current_time=None, dynamic_preferences=None
             if is_free:
                 # Normalize wine name from schedule for exclusion check
                 normalized_opening_name = normalize_name(opening.get("name"))
-                # Check if already tasted or excluded (using the final combined set)
+                # Check if excluded (now only based on selected MCs + ignore_tasted flag)
                 if normalized_opening_name not in final_excluded_wines:
                     possible_openings.append(opening)
 

@@ -262,84 +262,10 @@ def parse_wine_list(pdf_path="Material/Wine_list_2025.pdf"):
     return wine_details, sorted(list(house_names))
 
 
-# Placeholder for tasting list parsing
-def parse_tastings(txt_path="Material/tastings.txt"):
-    """
-    Parses the user's tasting schedule and tasted champagnes from tastings.txt.
-    Assumes format:
-        Day DD.MM.YYYY klo HH.MM:
-        Champagne Name 1
-        Champagne Name 2
-        ...
-        <Blank Line>
-        Day DD.MM.YYYY klo HH.MM:
-        ...
-
-    Returns:
-        tuple: (list_of_tasting_slots, set_of_tasted_champagnes)
-               tasting_slots: [{'start': datetime, 'end': datetime, 'names': [str, ...]}, ...]
-               tasted_champagnes: {str, ...} - A set of unique champagne names from all tastings.
-    """
-    tasting_slots = []
-    tasted_champagnes_set = set()
-
-    # Regex to find the header line like "Perjantai 25.4.2025 klo 18.00:"
-    HEADER_PATTERN = re.compile(
-        r"^\w+\s+(\d{1,2}\.\d{1,2}\.\d{4})\s+klo\s+(\d{1,2}\.\d{2}):?$", re.IGNORECASE
-    )
-
-    try:
-        with open(txt_path, "r", encoding="utf-8") as f:
-            current_tasting = None
-            for line in f:
-                line = line.strip()
-
-                header_match = HEADER_PATTERN.match(line)
-                if header_match:
-                    date_str = header_match.group(1)  # DD.MM.YYYY
-                    time_str = header_match.group(2).replace(".", ":")  # HH:MM
-
-                    try:
-                        # Combine date and time, parse to datetime
-                        dt_str = f"{date_str} {time_str}"
-                        start_time = datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
-
-                        # Assume 1 hour duration for the tasting slot
-                        end_time = start_time + timedelta(hours=1)
-
-                        # Start a new tasting entry
-                        current_tasting = {
-                            "start": start_time,
-                            "end": end_time,
-                            "names": [],
-                        }
-                        tasting_slots.append(current_tasting)
-
-                    except ValueError as e:
-                        print(
-                            f"Warning: Could not parse date/time in tasting file line: '{line}'. Error: {e}"
-                        )
-                        current_tasting = None  # Skip wines until next valid header
-                    continue  # Move to next line after processing header
-
-                # If line is not empty and we have a current tasting block
-                if line and current_tasting is not None:
-                    champagne_name = re.sub(r"\s+", " ", line).strip()
-                    if champagne_name:
-                        current_tasting["names"].append(champagne_name)
-                        tasted_champagnes_set.add(champagne_name)
-                elif not line:
-                    # Blank line signifies end of current tasting block's wines
-                    current_tasting = None  # Reset until next header
-
-    except FileNotFoundError:
-        print(f"Warning: Tastings file not found at {txt_path}. Returning empty data.")
-        return [], set()
-    except Exception as e:
-        print(f"An error occurred during tastings file parsing: {e}")
-        return [], set()
-
-    return tasting_slots, tasted_champagnes_set
+# --- Removed parse_tastings function ---
+# The logic for handling Master Class time conflicts and
+# optional wine exclusion based on MC lists is now handled
+# in app.py and core_logic.py
 
 
 # Placeholder for preferences parsing
@@ -463,29 +389,6 @@ if __name__ == "__main__":
             print("  ...")
     else:
         print("Could not parse prices or file is empty/invalid.")
-
-    # --- Parse Tastings ---
-    print("\n--- Parsed Tastings (stdout) ---")
-    parsed_tasting_slots, parsed_tasted_champagnes = parse_tastings()
-    if parsed_tasting_slots:
-        print(f"Successfully parsed {len(parsed_tasting_slots)} tasting slots.")
-        for slot in parsed_tasting_slots[:3]:  # Show first few slots
-            print(f"  Slot Start: {slot['start']}, End: {slot['end']}")
-            for name in slot["names"][:2]:  # Show first few names in slot
-                print(f"    - {name}")
-            if len(slot["names"]) > 2:
-                print("      ...")
-        if len(parsed_tasting_slots) > 3:
-            print("  ...")
-        print(f"Total unique champagnes in tastings: {len(parsed_tasted_champagnes)}")
-        # Example of printing tasted champagnes
-        # print("Tasted Champagnes Set:")
-        # for name in sorted(list(parsed_tasted_champagnes))[:5]:
-        #     print(f"  - {name}")
-        # if len(parsed_tasted_champagnes) > 5: print("  ...")
-
-    else:
-        print("Could not parse tastings or file is empty/invalid.")
 
     # --- Parse Preferences ---
     print("\n--- Parsed Preferences (stdout) ---")

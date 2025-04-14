@@ -204,13 +204,22 @@ def get_next_opening():
                             "end": found_mc["end_datetime"],
                         }
                     )
-                # Collect wines to exclude
+                # Collect wines to potentially exclude (based on flag later)
                 if found_mc.get("wines"):
                     excluded_wines_from_mc.update(found_mc["wines"])
 
     # Add collected data to dynamic preferences
-    if excluded_wines_from_mc:
+    # Conditionally add MC wines to exclusion list
+    if excluded_wines_from_mc and not ignore_tasted_flag:
         dynamic_preferences["excluded_wines"] = list(excluded_wines_from_mc)
+        # print(f"DEBUG: Excluding MC wines because ignore_tasted is False: {excluded_wines_from_mc}")
+    elif excluded_wines_from_mc:
+        # Ensure the key exists but is empty if ignore_tasted is True, so core_logic doesn't mix things up
+        # If the flag is true, we still collected them, but we don't pass them for exclusion.
+        # dynamic_preferences["excluded_wines"] = [] # This line might be redundant if core_logic handles absence okay
+        pass  # Don't add MC wines to exclusion list if ignore_tasted is True
+        # print(f"DEBUG: NOT excluding MC wines because ignore_tasted is True: {excluded_wines_from_mc}")
+
     if attended_mc_slots:
         dynamic_preferences["attended_mc_slots"] = attended_mc_slots
     # ---------------------------------------------------------- #
