@@ -399,382 +399,434 @@
     </nav>
 
     <script>
+        // --- localStorage Key ---
+        const PREFS_STORAGE_KEY = 'grandChampagnePrefs';
+
         // --- Ville's Preferences (Defaults) ---
          const VILLE_PREFS = {
              houses: ["Bollinger", "Charles Heidsieck", "Palmer"],
              size: "magnum",
-             older_than_year: 1990
+             older_than_year: 1990,
+             attended_mc_ids: [] // Ville starts with no MCs attended
          };
         // ----------------------------------------
 
-        document.addEventListener('DOMContentLoaded', function() {
-            // Tab Switching Logic
-            const tabButtons = document.querySelectorAll('.tab-nav-button');
-            const tabPanes = document.querySelectorAll('.tab-pane');
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Wrap core logic in an IIFE
+            (async () => {
+                // --- Element References ---
+                const recommendationsContent = document.getElementById('recommendations-content');
+                const recLoading = recommendationsContent.querySelector('.loading');
+                const recError = recommendationsContent.querySelector('.error');
+                const recNoResults = recommendationsContent.querySelector('.no-results');
 
-            tabButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                    const targetTabId = button.getAttribute('data-tab');
+                const prefsForm = document.getElementById('preferences-form');
+                const houseSearchInput = document.getElementById('house-search');
+                const houseListContainer = document.getElementById('house-list-container');
+                const sizeSelect = document.getElementById('size-select');
+                const olderThanInput = document.getElementById('older-than-input');
+                const villePrefsBtn = document.getElementById('ville-prefs-btn');
+                const clearPrefsBtn = document.getElementById('clear-prefs-btn');
 
-                    // Deactivate all buttons and panes
-                    tabButtons.forEach(btn => btn.classList.remove('active'));
-                    tabPanes.forEach(pane => pane.classList.remove('active'));
+                const masterclassContent = document.getElementById('masterclass-content');
+                const mcLoading = masterclassContent.querySelector('.loading');
+                const mcError = masterclassContent.querySelector('.error');
 
-                    // Activate clicked button and corresponding pane
-                    button.classList.add('active');
-                    document.getElementById(targetTabId).classList.add('active');
-                });
-            });
+                // --- Data Loading Flags ---
+                let housesLoaded = false;
+                let masterClassesLoaded = false;
+                let isFetching = false; // Prevent concurrent fetches
 
-            // --- Element References (adjust based on new structure) ---
-            const recommendationsContent = document.getElementById('recommendations-content');
-            const recLoading = recommendationsContent.querySelector('.loading');
-            const recError = recommendationsContent.querySelector('.error');
-            const recNoResults = recommendationsContent.querySelector('.no-results');
-            // Results list will be created dynamically
+                // --- Tab Switching ---
+                setupTabSwitching(); // Encapsulate tab logic
 
-            const prefsForm = document.getElementById('preferences-form'); // Keep form reference
-            const houseSearchInput = document.getElementById('house-search'); // <<< Add reference for search input
-            const houseListContainer = document.getElementById('house-list-container');
-            const sizeSelect = document.getElementById('size-select');
-            const olderThanInput = document.getElementById('older-than-input');
-            const villePrefsBtn = document.getElementById('ville-prefs-btn');
-            const clearPrefsBtn = document.getElementById('clear-prefs-btn');
-
-            const masterclassContent = document.getElementById('masterclass-content');
-            const mcLoading = masterclassContent.querySelector('.loading');
-            const mcError = masterclassContent.querySelector('.error');
-            // MC list will be created dynamically
-
-            // --- Data Loading Flags ---
-            let housesLoaded = false;
-            let masterClassesLoaded = false;
-
-             // --- Populate House List ---
-             function populateHouseList(houses) {
-                 houseListContainer.innerHTML = ''; // Clear loading/previous
-                 if (!houses || houses.length === 0) {
-                     houseListContainer.innerHTML = '<p>No houses found.</p>';
-                     return;
+                // --- Populate Static House List ---
+                const initialHouses = {{ houses|tojson|safe }};
+                 if (initialHouses) {
+                     populateHouseList(initialHouses);
+                 } else {
+                     houseListContainer.innerHTML = '<p class="error">Could not load house list from server.</p>';
                  }
-                 houses.forEach(house => {
-                     const label = document.createElement('label');
-                     const checkbox = document.createElement('input');
-                     checkbox.type = 'checkbox';
-                     checkbox.name = 'house'; // Used for form data
-                     checkbox.value = house;
-                     label.appendChild(checkbox);
-                     label.appendChild(document.createTextNode(` ${house}`)); // Add space
-                     houseListContainer.appendChild(label);
-                 });
-                 housesLoaded = true;
-                 // Add listener after population
-                 addPreferenceChangeListener(houseListContainer);
-             }
-             // Initial house data comes from Flask template rendering, if available
-             const initialHouses = {{ houses|tojson|safe }};
-             if (initialHouses) {
-                 populateHouseList(initialHouses);
-             } else {
-                 houseListContainer.innerHTML = '<p class="error">Could not load house list from server.</p>';
-             }
 
+                // --- Fetch Dynamic Data (Master Classes) ---
+                // Fetch MCs *before* attempting to load preferences that might affect them
+                await fetchMasterClasses();
 
-             // --- Master Class Loading & Display ---
-            async function fetchMasterClasses() {
-                mcLoading.style.display = 'block';
-                mcError.style.display = 'none';
-                // Clear previous list if any
-                masterclassContent.querySelectorAll('.day-section').forEach(el => el.remove());
+                // --- Preferences Load/Apply Logic ---
+                let prefsLoadedFromStorage = loadPreferencesFromLocalStorage();
 
-                try {
-                    const response = await fetch("{{ url_for('static', filename='master_classes.json') }}");
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const classes = await response.json();
-                    displayMasterClasses(classes);
-                    mcLoading.style.display = 'none';
-                    masterClassesLoaded = true;
-                } catch (error) {
-                    console.error("Error loading master classes:", error);
-                    mcLoading.style.display = 'none';
-                    mcError.textContent = `Failed to load classes: ${error.message}`;
-                    mcError.style.display = 'block';
+                if (!prefsLoadedFromStorage) {
+                    console.log("No preferences found in localStorage, applying Ville Defaults.");
+                    applyPreferencesToUI(VILLE_PREFS); // Apply defaults to UI but don't fetch yet
+                    savePreferencesToLocalStorage(); // Save Ville's defaults if none existed
+                } else {
+                    console.log("Loaded preferences from localStorage.");
                 }
-            }
 
-            function displayMasterClasses(classes) {
-                 mcLoading.style.display = 'none';
-                 mcError.style.display = 'none';
-                 masterclassContent.querySelectorAll('.day-section').forEach(el => el.remove()); // Clear before adding
+                // --- Initial Recommendation Fetch ---
+                // Now fetch based on either loaded or default preferences
+                await fetchRecommendations();
 
-                 if (!classes || classes.length === 0) {
-                     mcError.textContent = 'No master classes found.';
-                     mcError.style.display = 'block'; // Use error display for info
-                     return;
-                 }
+                // --- Setup Auto-Refresh Timer ---
+                setInterval(fetchRecommendations, 2 * 60 * 1000); // 2 minutes
 
-                 const groupedByDay = classes.reduce((acc, mc) => {
-                     const day = mc.day || "Unknown Day";
-                     if (!acc[day]) acc[day] = [];
-                     acc[day].push(mc);
-                     return acc;
-                 }, {});
+                // --- Setup Event Listeners ---
+                setupEventListeners();
 
-                 const sortedDays = Object.keys(groupedByDay).sort((a, b) => {
-                     const order = { "Friday": 1, "Saturday": 2, "Unknown Day": 3 };
-                     return (order[a] || 99) - (order[b] || 99);
-                 });
+                // ==================================================================
+                //                       HELPER FUNCTIONS
+                // ==================================================================
 
-                 sortedDays.forEach(day => {
-                     const daySection = document.createElement('div');
-                     daySection.className = 'day-section';
-                     const dayHeading = document.createElement('h3');
-                     dayHeading.className = 'day-heading';
-                     dayHeading.textContent = day;
-                     daySection.appendChild(dayHeading);
+                function setupTabSwitching() {
+                    const tabButtons = document.querySelectorAll('.tab-nav-button');
+                    const tabPanes = document.querySelectorAll('.tab-pane');
+                    tabButtons.forEach(button => {
+                        button.addEventListener('click', () => {
+                            const targetTabId = button.getAttribute('data-tab');
+                            tabButtons.forEach(btn => btn.classList.remove('active'));
+                            tabPanes.forEach(pane => pane.classList.remove('active'));
+                            button.classList.add('active');
+                            document.getElementById(targetTabId).classList.add('active');
+                        });
+                    });
+                }
 
-                     const ul = document.createElement('ul');
-                     ul.className = 'mc-list';
-                     const sortedClasses = groupedByDay[day].sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-
-                     sortedClasses.forEach(mc => {
-                         const li = document.createElement('li');
-                         li.className = 'mc-item';
+                 function populateHouseList(houses) {
+                     houseListContainer.innerHTML = ''; // Clear loading/previous
+                     if (!houses || houses.length === 0) {
+                         houseListContainer.innerHTML = '<p>No houses found.</p>';
+                         return;
+                     }
+                     houses.forEach(house => {
+                         const label = document.createElement('label');
                          const checkbox = document.createElement('input');
                          checkbox.type = 'checkbox';
-                         const identifier = mc.link || `${mc.presenter}-${mc.title}`;
-                         const safeIdentifier = identifier.replace(/[^a-zA-Z0-9-_]/g, '-');
-                         checkbox.value = identifier;
-                         checkbox.id = `mc-${safeIdentifier}`;
-                         checkbox.name = "attended_mc_id";
-
-                         const label = document.createElement('label');
-                         label.htmlFor = checkbox.id;
-                         label.appendChild(checkbox); // Checkbox inside label for better tap target
-                         label.appendChild(document.createTextNode(` ${mc.title || "Untitled Class"}`));
-
-                         const details = document.createElement('div');
-                         details.className = 'details';
-                         details.textContent = `${mc.time || 'Time N/A'} - ${mc.presenter || 'N/A'}`;
-
-                         li.appendChild(label);
-                         li.appendChild(details);
-                         ul.appendChild(li);
+                         checkbox.name = 'house';
+                         checkbox.value = house;
+                         label.appendChild(checkbox);
+                         label.appendChild(document.createTextNode(` ${house}`));
+                         houseListContainer.appendChild(label);
                      });
-                     daySection.appendChild(ul);
-                     masterclassContent.appendChild(daySection); // Append each day section
-                 });
-                 // Add listener after population
-                 addPreferenceChangeListener(masterclassContent);
-            }
+                     housesLoaded = true;
+                 }
 
+                async function fetchMasterClasses() {
+                    mcLoading.style.display = 'block';
+                    mcError.style.display = 'none';
+                    masterclassContent.querySelectorAll('.day-section').forEach(el => el.remove());
 
-            // --- Recommendation Fetching and Display ---
-            let isFetching = false; // Prevent concurrent fetches
-            async function fetchRecommendations() {
-                // <<< Log when fetchRecommendations starts >>>
-                console.log('fetchRecommendations called...');
-
-                if (isFetching) {
-                    console.log('...but already fetching, returning.');
-                    return; // Don't fetch if already fetching
-                }
-                isFetching = true;
-
-                recLoading.style.display = 'block';
-                recError.style.display = 'none';
-                recNoResults.style.display = 'none';
-                recommendationsContent.querySelectorAll('.opening').forEach(el => el.remove()); // Clear previous results
-
-                // Give UI time to update loading state
-                await new Promise(resolve => setTimeout(resolve, 50));
-
-                const formData = new FormData(); // Create new FormData
-
-                // Collect preferences from the #preferences-tab-content
-                const houseCheckboxes = houseListContainer.querySelectorAll('input[name="house"]:checked');
-                houseCheckboxes.forEach(cb => formData.append('house', cb.value));
-
-                formData.append('size', sizeSelect.value);
-                if (olderThanInput.value) {
-                    formData.append('older_than_year', olderThanInput.value);
-                }
-
-                // Collect selected master classes from #masterclass-tab-content
-                const mcCheckboxes = masterclassContent.querySelectorAll('input[name="attended_mc_id"]:checked');
-                mcCheckboxes.forEach(cb => formData.append('attended_mc_id', cb.value));
-
-
-                const params = new URLSearchParams(formData);
-                console.log("Fetching with params:", params.toString());
-
-                try {
-                    const response = await fetch(`/api/next-opening?${params.toString()}`);
-                    recLoading.style.display = 'none';
-
-                    if (!response.ok) {
-                        let errorText = `Error: ${response.status}`;
-                        try {
-                            const errorData = await response.json();
-                            errorText += ` - ${errorData.error || errorData.message || 'Unknown API error'}`;
-                        } catch (e) {}
-                        throw new Error(errorText);
+                    try {
+                        const response = await fetch("{{ url_for('static', filename='master_classes.json') }}");
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                        const classes = await response.json();
+                        displayMasterClasses(classes);
+                        masterClassesLoaded = true; // Set flag after successful display
+                    } catch (error) {
+                        console.error("Error loading master classes:", error);
+                        mcLoading.style.display = 'none';
+                        mcError.textContent = `Failed to load classes: ${error.message}`;
+                        mcError.style.display = 'block';
+                        masterClassesLoaded = false; // Ensure flag is false on error
                     }
-                    const data = await response.json();
-                    if (data.error) throw new Error(data.error + (data.details ? ` ${data.details}` : ''));
-
-                    // <<< Log the received data structure >>>
-                    console.log('Data received by displayOpenings:', JSON.stringify(data));
-
-                    displayOpenings(data);
-
-                } catch (error) {
-                    console.error('Error fetching recommendations:', error);
-                    recLoading.style.display = 'none';
-                    recError.textContent = `Could not load recommendations: ${error.message}`;
-                    recError.style.display = 'block';
-                } finally {
-                     isFetching = false; // Allow fetching again
                 }
-            }
 
-            function displayOpenings(openings) {
-                 recLoading.style.display = 'none';
-                 recError.style.display = 'none';
-                 recNoResults.style.display = 'none';
-                 // Clear previous results more directly
-                 recommendationsContent.innerHTML = '';
+                function displayMasterClasses(classes) {
+                     mcLoading.style.display = 'none';
+                     mcError.style.display = 'none';
+                     masterclassContent.querySelectorAll('.day-section').forEach(el => el.remove());
 
-                 if (openings.message) {
-                     // Create and append the no-results message element if needed
-                     const noResultsDiv = document.createElement('div');
-                     noResultsDiv.className = 'no-results';
-                     noResultsDiv.textContent = openings.message;
-                     recommendationsContent.appendChild(noResultsDiv);
-                     // recNoResults.textContent = openings.message;
-                     // recNoResults.style.display = 'block';
-                 } else if (Array.isArray(openings) && openings.length > 0) {
-                     // Formatters for concise date/time
-                     const dayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'short' }); // e.g., "Fri"
-                     const timeFormatter = new Intl.DateTimeFormat('en-US', { 'hour': '2-digit', 'minute': '2-digit', 'hour12': false }); // e.g., "14:30" (Added quotes around keys)
+                     if (!classes || classes.length === 0) {
+                         mcError.textContent = 'No master classes found.';
+                         mcError.style.display = 'block';
+                         return;
+                     }
 
-                     openings.forEach(opening => {
-                         const div = document.createElement('div');
-                         div.className = 'opening card';
-                         const time = new Date(opening.time);
-                         let formattedTime = "Invalid Date";
-                         if (!isNaN(time)) { // Check if date is valid
-                            formattedTime = `${dayFormatter.format(time)} ${timeFormatter.format(time)}`;
-                         }
+                     const groupedByDay = classes.reduce((acc, mc) => {
+                         const day = mc.day || "Unknown Day";
+                         if (!acc[day]) acc[day] = [];
+                         acc[day].push(mc);
+                         return acc;
+                     }, {});
 
-                         // Use more structured HTML with specific classes matching the CSS
-                         div.innerHTML = `
-                             <div class="rec-name">${opening.name || 'Unnamed Champagne'}</div>
-                             <div class="rec-time">${formattedTime}</div>
-                             <div class="rec-details">
-                                 <span>Stand: ${opening.stand || 'N/A'}</span>
-                                 <span>${opening.glass_price !== null && opening.glass_price !== undefined ? `Glass: ${opening.glass_price}€` : '<span class="price-na">Glass: N/A</span>'}</span>
-                                 <span class="score">Score: ${opening.preference_score !== null && opening.preference_score !== undefined ? opening.preference_score : 'N/A'}</span>
-                             </div>
-                         `;
-                         // <<< Log the generated HTML for the specific problematic item >>>
-                         if (opening.name && opening.name.includes("Palmer & Co Collection Vintage 1985 Magnum")) {
-                             console.log('Generated HTML for Palmer 1985:', div.innerHTML);
-                         }
-                         recommendationsContent.appendChild(div);
+                     const sortedDays = Object.keys(groupedByDay).sort((a, b) => {
+                         const order = { "Friday": 1, "Saturday": 2, "Unknown Day": 3 };
+                         return (order[a] || 99) - (order[b] || 99);
                      });
-                 } else {
-                     recNoResults.textContent = 'No highly preferred openings match your criteria.';
-                     recNoResults.style.display = 'block';
-                 }
-            }
 
-             // --- Preference Application Logic ---
-            function applyVillePrefs(fetch = true) {
-                 clearAllPrefs(false); // Clear without fetching yet
+                     sortedDays.forEach(day => {
+                         const daySection = document.createElement('div');
+                         daySection.className = 'day-section';
+                         const dayHeading = document.createElement('h3');
+                         dayHeading.className = 'day-heading';
+                         dayHeading.textContent = day;
+                         daySection.appendChild(dayHeading);
 
-                 const houseCheckboxes = houseListContainer.querySelectorAll('input[name="house"]');
-                 houseCheckboxes.forEach(cb => {
-                     cb.checked = VILLE_PREFS.houses.includes(cb.value);
-                 });
-                 sizeSelect.value = VILLE_PREFS.size;
-                 olderThanInput.value = VILLE_PREFS.older_than_year;
+                         const ul = document.createElement('ul');
+                         ul.className = 'mc-list';
+                         const sortedClasses = groupedByDay[day].sort((a, b) => (a.time || "").localeCompare(b.time || ""));
 
-                 // Ensure MCs are cleared
-                 masterclassContent.querySelectorAll('input[name="attended_mc_id"]').forEach(cb => cb.checked = false);
+                         sortedClasses.forEach(mc => {
+                             const li = document.createElement('li');
+                             li.className = 'mc-item';
+                             const checkbox = document.createElement('input');
+                             checkbox.type = 'checkbox';
+                             const identifier = mc.link || `${mc.presenter}-${mc.title}`;
+                             const safeIdentifier = identifier.replace(/[^a-zA-Z0-9-_]/g, '-');
+                             checkbox.value = identifier;
+                             checkbox.id = `mc-${safeIdentifier}`;
+                             checkbox.name = "attended_mc_id";
 
-                 if (fetch) {
-                    fetchRecommendations(); // Fetch with new defaults
-                 }
-             }
+                             const label = document.createElement('label');
+                             label.htmlFor = checkbox.id;
+                             label.appendChild(checkbox);
+                             label.appendChild(document.createTextNode(` ${mc.title || "Untitled Class"}`));
 
-            function clearAllPrefs(fetch = true) {
-                 // Clear form elements in preferences tab
-                 houseListContainer.querySelectorAll('input[name="house"]').forEach(cb => cb.checked = false);
-                 sizeSelect.value = 'any';
-                 olderThanInput.value = '';
+                             const details = document.createElement('div');
+                             details.className = 'details';
+                             details.textContent = `${mc.time || 'Time N/A'} - ${mc.presenter || 'N/A'}`;
 
-                 // Clear checkboxes in masterclass tab
-                 masterclassContent.querySelectorAll('input[name="attended_mc_id"]').forEach(cb => cb.checked = false);
+                             li.appendChild(label);
+                             li.appendChild(details);
+                             ul.appendChild(li);
+                         });
+                         daySection.appendChild(ul);
+                         masterclassContent.appendChild(daySection);
+                     });
+                }
 
-                 if (fetch) {
-                    fetchRecommendations(); // Fetch with cleared preferences
-                 }
-             }
+                // --- Preference Gathering ---
+                function getCurrentPreferences() {
+                    const selectedHouses = Array.from(houseListContainer.querySelectorAll('input[name="house"]:checked')).map(cb => cb.value);
+                    const selectedMCs = Array.from(masterclassContent.querySelectorAll('input[name="attended_mc_id"]:checked')).map(cb => cb.value);
+                    return {
+                        houses: selectedHouses,
+                        size: sizeSelect.value,
+                        older_than_year: olderThanInput.value ? parseInt(olderThanInput.value, 10) : null,
+                        attended_mc_ids: selectedMCs
+                    };
+                }
 
-             // --- Event Listeners ---
-             villePrefsBtn.addEventListener('click', () => applyVillePrefs(true));
-             clearPrefsBtn.addEventListener('click', () => clearAllPrefs(true));
+                // --- Preference UI Application ---
+                function applyPreferencesToUI(prefs) {
+                    if (!prefs) return;
 
-             // Listener for changes in preferences or masterclasses to auto-refresh
-             function addPreferenceChangeListener(container) {
-                 container.addEventListener('change', function(event) {
-                     // Check if the change occurred on a form element we care about
-                     if (event.target.matches('input[type="checkbox"], select, input[type="number"]')) {
-                         // <<< Log when the listener fires >>>
-                         console.log('Preference change detected on:', event.target);
-                         console.log('Preference changed, fetching recommendations...');
-                         fetchRecommendations();
-                     }
-                 });
-             }
-             // Add initial listeners
-             addPreferenceChangeListener(prefsForm); // Catches size, year
-             // Listeners for house list and MC list are added *after* they are populated
+                    // Houses (only if list is loaded)
+                    if (housesLoaded) {
+                       houseListContainer.querySelectorAll('input[name="house"]').forEach(cb => {
+                           cb.checked = prefs.houses?.includes(cb.value) ?? false;
+                       });
+                    }
 
-             // <<< Add listener for House Search Filter >>>
-             houseSearchInput.addEventListener('input', function() {
-                 const searchTerm = houseSearchInput.value.toLowerCase();
-                 const labels = houseListContainer.querySelectorAll('label');
-                 labels.forEach(label => {
-                     const houseName = label.textContent.trim().toLowerCase();
-                     if (houseName.includes(searchTerm)) {
-                         label.style.display = 'flex'; // Show matching labels (using flex as defined in CSS)
+                    // Size
+                    sizeSelect.value = prefs.size ?? 'any';
+
+                    // Age
+                    olderThanInput.value = prefs.older_than_year ?? '';
+
+                    // Master Classes (only if list is loaded)
+                    if (masterClassesLoaded) {
+                        masterclassContent.querySelectorAll('input[name="attended_mc_id"]').forEach(cb => {
+                             cb.checked = prefs.attended_mc_ids?.includes(cb.value) ?? false;
+                        });
+                    }
+                    // Apply house search filter based on loaded houses if needed (optional)
+                     filterHouseList();
+                }
+
+                // --- Local Storage ---
+                function savePreferencesToLocalStorage() {
+                    const currentPrefs = getCurrentPreferences();
+                    try {
+                        localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(currentPrefs));
+                        console.log("Preferences saved to localStorage:", currentPrefs);
+                    } catch (e) {
+                        console.error("Error saving preferences to localStorage:", e);
+                        // Handle potential storage full errors etc.
+                    }
+                }
+
+                function loadPreferencesFromLocalStorage() {
+                    try {
+                        const savedPrefsString = localStorage.getItem(PREFS_STORAGE_KEY);
+                        if (savedPrefsString) {
+                            const loadedPrefs = JSON.parse(savedPrefsString);
+                            applyPreferencesToUI(loadedPrefs); // Apply to UI elements
+                            return true; // Indicate success
+                        }
+                    } catch (e) {
+                        console.error("Error loading or parsing preferences from localStorage:", e);
+                        localStorage.removeItem(PREFS_STORAGE_KEY); // Clear potentially corrupted data
+                    }
+                    return false; // Indicate failure or no data
+                }
+
+                // --- Recommendation Fetching and Display ---
+                async function fetchRecommendations() {
+                    console.log('fetchRecommendations called...');
+                    if (isFetching) {
+                        console.log('...but already fetching, returning.');
+                        return;
+                    }
+                    isFetching = true;
+
+                    recLoading.style.display = 'block';
+                    recError.style.display = 'none';
+                    recNoResults.style.display = 'none';
+                    recommendationsContent.querySelectorAll('.opening').forEach(el => el.remove());
+
+                    await new Promise(resolve => setTimeout(resolve, 50)); // Allow UI update
+
+                    const currentPrefs = getCurrentPreferences(); // Get current prefs from UI
+                    const params = new URLSearchParams();
+
+                    currentPrefs.houses.forEach(h => params.append('house', h));
+                    if (currentPrefs.size && currentPrefs.size !== 'any') {
+                         params.append('size', currentPrefs.size);
+                    }
+                    if (currentPrefs.older_than_year) {
+                        params.append('older_than_year', currentPrefs.older_than_year);
+                    }
+                    currentPrefs.attended_mc_ids.forEach(id => params.append('attended_mc_id', id));
+
+                    console.log("Fetching with params:", params.toString());
+
+                    try {
+                        const response = await fetch(`/api/next-opening?${params.toString()}`);
+                        recLoading.style.display = 'none';
+
+                        if (!response.ok) {
+                            let errorText = `Error: ${response.status}`;
+                            try { const errorData = await response.json(); errorText += ` - ${errorData.error || errorData.message || 'Unknown API error'}`; } catch (e) {}
+                            throw new Error(errorText);
+                        }
+                        const data = await response.json();
+                        if (data.error) throw new Error(data.error + (data.details ? ` ${data.details}` : ''));
+
+                        console.log('Data received by displayOpenings:', JSON.stringify(data));
+                        displayOpenings(data);
+
+                    } catch (error) {
+                        console.error('Error fetching recommendations:', error);
+                        recLoading.style.display = 'none';
+                        recError.textContent = `Could not load recommendations: ${error.message}`;
+                        recError.style.display = 'block';
+                    } finally {
+                         isFetching = false;
+                    }
+                }
+
+                function displayOpenings(openings) {
+                     recLoading.style.display = 'none';
+                     recError.style.display = 'none';
+                     recNoResults.style.display = 'none';
+                     recommendationsContent.innerHTML = ''; // Clear previous
+
+                     if (openings.message) {
+                         const noResultsDiv = document.createElement('div');
+                         noResultsDiv.className = 'no-results';
+                         noResultsDiv.textContent = openings.message;
+                         recommendationsContent.appendChild(noResultsDiv);
+                     } else if (Array.isArray(openings) && openings.length > 0) {
+                         const dayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'short' });
+                         const timeFormatter = new Intl.DateTimeFormat('en-US', { 'hour': '2-digit', 'minute': '2-digit', 'hour12': false });
+
+                         openings.forEach(opening => {
+                             const div = document.createElement('div');
+                             div.className = 'opening card';
+                             const time = new Date(opening.time);
+                             let formattedTime = "Invalid Date";
+                             if (!isNaN(time)) {
+                                formattedTime = `${dayFormatter.format(time)} ${timeFormatter.format(time)}`;
+                             }
+                             // Use textContent for safety against XSS in names/details
+                             const nameDiv = document.createElement('div');
+                             nameDiv.className = 'rec-name';
+                             nameDiv.textContent = opening.name || 'Unnamed Champagne';
+
+                             const timeDiv = document.createElement('div');
+                             timeDiv.className = 'rec-time';
+                             timeDiv.textContent = formattedTime;
+
+                             const detailsDiv = document.createElement('div');
+                             detailsDiv.className = 'rec-details';
+
+                             const standSpan = document.createElement('span');
+                             standSpan.textContent = `Stand: ${opening.stand || 'N/A'}`;
+
+                             const priceSpan = document.createElement('span');
+                             if (opening.glass_price !== null && opening.glass_price !== undefined) {
+                                 priceSpan.textContent = `Glass: ${opening.glass_price}€`;
+                             } else {
+                                 priceSpan.classList.add('price-na');
+                                 priceSpan.textContent = 'Glass: N/A';
+                             }
+
+                             const scoreSpan = document.createElement('span');
+                             scoreSpan.className = 'score';
+                             scoreSpan.textContent = `Score: ${opening.preference_score !== null && opening.preference_score !== undefined ? opening.preference_score : 'N/A'}`;
+
+                             detailsDiv.appendChild(standSpan);
+                             detailsDiv.appendChild(priceSpan);
+                             detailsDiv.appendChild(scoreSpan);
+
+                             div.appendChild(nameDiv);
+                             div.appendChild(timeDiv);
+                             div.appendChild(detailsDiv);
+
+                             recommendationsContent.appendChild(div);
+                         });
                      } else {
-                         label.style.display = 'none';  // Hide non-matching labels
+                         recNoResults.textContent = 'No highly preferred openings match your criteria.';
+                         recNoResults.style.display = 'block';
                      }
-                 });
-             });
+                }
 
-             // --- Initial Load ---
-             fetchMasterClasses(); // Fetch MC list
-
-             // <<< Apply Ville Defaults to the form initially, without fetching yet >>>
-             applyVillePrefs(false);
-
-             // Recommendations are fetched automatically when MC list load finishes OR if it fails
-             // OR if initial houses are populated. Add a fallback just in case.
-             // This fetch will now use the applied Ville Defaults.
-             setTimeout(() => {
-                 if (!isFetching) { // Only fetch if not already triggered by MC load
-                     fetchRecommendations();
+                 // --- Preference Button Actions ---
+                function handleVillePrefs() {
+                     applyPreferencesToUI(VILLE_PREFS); // Apply defaults to UI
+                     savePreferencesToLocalStorage(); // Save these defaults
+                     fetchRecommendations(); // Fetch with new defaults
                  }
-             }, 500); // Small delay to allow MC/House loading
 
-             // <<< Add a timer to refresh recommendations periodically (e.g., every 2 minutes) >>>
-             setInterval(fetchRecommendations, 120000); // 120000 ms = 2 minutes
+                function handleClearPrefs() {
+                     applyPreferencesToUI({ houses: [], size: 'any', older_than_year: null, attended_mc_ids: [] }); // Clear UI
+                     localStorage.removeItem(PREFS_STORAGE_KEY); // Remove from storage
+                     console.log("Cleared preferences from localStorage.");
+                     fetchRecommendations(); // Fetch with cleared preferences
+                 }
 
-        });
+                 // --- House Search Filter ---
+                 function filterHouseList() {
+                     const searchTerm = houseSearchInput.value.toLowerCase();
+                     const labels = houseListContainer.querySelectorAll('label');
+                     labels.forEach(label => {
+                         const houseName = label.textContent.trim().toLowerCase();
+                         label.style.display = houseName.includes(searchTerm) ? 'flex' : 'none';
+                     });
+                 }
+
+                 // --- Setup Event Listeners ---
+                 function setupEventListeners() {
+                     villePrefsBtn.addEventListener('click', handleVillePrefs);
+                     clearPrefsBtn.addEventListener('click', handleClearPrefs);
+
+                     // Combined listener for changes in preferences or masterclasses
+                     function handlePreferenceChange(event) {
+                         if (event.target.matches('input[type="checkbox"], select, input[type="number"]')) {
+                             console.log('Preference change detected on:', event.target);
+                             savePreferencesToLocalStorage(); // Save on every change
+                             fetchRecommendations(); // Then fetch
+                         }
+                     }
+
+                     prefsForm.addEventListener('change', handlePreferenceChange); // Catches size, year
+                     houseListContainer.addEventListener('change', handlePreferenceChange); // Catches house checkboxes
+                     masterclassContent.addEventListener('change', handlePreferenceChange); // Catches MC checkboxes
+
+                     houseSearchInput.addEventListener('input', filterHouseList);
+                 }
+            })(); // End of IIFE
+        }); // End of DOMContentLoaded listener
     </script>
 </body>
 </html> 
