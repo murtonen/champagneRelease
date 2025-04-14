@@ -43,4 +43,4 @@ instance/
 .flask_env
 
 # Scraped files
-master_class*
+master_class*.html # Ignore master class HTML files, but not the JSON
