@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import re
 from flask import Flask, jsonify, render_template, request
 from datetime import datetime, timedelta
 
@@ -16,8 +17,9 @@ app = Flask(__name__)
 # --- Constants for MC Time Parsing ---
 EVENT_YEAR = 2025
 EVENT_DATES = {
-    "FRIDAY": f"{EVENT_YEAR}-04-25",
-    "SATURDAY": f"{EVENT_YEAR}-04-26",
+    "TORSTAI": f"{EVENT_YEAR}-04-24",  # Thursday
+    "PERJANTAI": f"{EVENT_YEAR}-04-25",  # Friday (Finnish)
+    "LAUANTAI": f"{EVENT_YEAR}-04-26",  # Saturday (Finnish)
     # Add other days if necessary
 }
 MC_DURATION_MINUTES = 60  # Assume 1 hour duration
@@ -52,9 +54,16 @@ def load_data_if_needed():
                 processed_mc_data = []
                 for mc in raw_mc_data:
                     try:
-                        day_str = mc.get("day", "").upper()
+                        raw_day_string = mc.get("day", "")
                         time_str = mc.get("time", "")
-                        date_str = EVENT_DATES.get(day_str)
+
+                        # Extract only the first word (day name) and uppercase it
+                        day_name_match = re.match(r"^(\w+)", raw_day_string)
+                        day_name_upper = (
+                            day_name_match.group(1).upper() if day_name_match else ""
+                        )
+
+                        date_str = EVENT_DATES.get(day_name_upper)
 
                         if date_str and time_str:
                             # Combine date and time, assuming HH:MM format for time
@@ -69,18 +78,28 @@ def load_data_if_needed():
                             mc["start_datetime"] = None
                             mc["end_datetime"] = None
                             print(
-                                f"Warning: Could not parse datetime for MC: {mc.get('title')} (Day: {mc.get('day')}, Time: {time_str})",
+                                f"Warning: Could not parse datetime for MC: {mc.get('title')} (Raw Day: '{raw_day_string}', Time: '{time_str}')",
                                 file=sys.stderr,
                             )
                         processed_mc_data.append(mc)
                     except ValueError as ve:
                         print(
-                            f"Warning: Invalid datetime format for MC: {mc.get('title')} (Day: {mc.get('day')}, Time: {time_str}). Error: {ve}",
+                            f"Warning: Invalid datetime format for MC: {mc.get('title')} (Raw Day: '{raw_day_string}', Time: '{time_str}'). Error: {ve}",
                             file=sys.stderr,
                         )
                         mc["start_datetime"] = None
                         mc["end_datetime"] = None
                         processed_mc_data.append(mc)  # Still append, but without times
+                    except (
+                        Exception
+                    ) as inner_e:  # Catch other potential errors during MC processing
+                        print(
+                            f"Error processing MC item {mc.get('title')}: {inner_e}",
+                            file=sys.stderr,
+                        )
+                        mc["start_datetime"] = None
+                        mc["end_datetime"] = None
+                        processed_mc_data.append(mc)
 
                 MASTER_CLASSES_DATA = processed_mc_data
                 print(
