@@ -362,11 +362,12 @@ def find_next_rare_opening(all_data, current_time=None, dynamic_preferences=None
             "magnum": ["magnum"],
             "jeroboam": ["jeroboam"],
             "methuselah": ["methuselah"],
-            "nabuchodonosor": ["nabuchodonosor"],
+            "nabuchodonosor": ["nabuchodonosor"],  # Key is now lowercase
         }  # Define sizes recognized for scoring
         for size_key, patterns in size_patterns.items():
             for pattern in patterns:
-                if f" {pattern}" in opening_name_lower:  # Check with space prefix
+                # Use regex word boundary search for robustness
+                if re.search(r"\b" + pattern + r"\b", opening_name_lower):
                     opening_size = size_key
                     break
             if opening_size:
@@ -418,12 +419,25 @@ def find_next_rare_opening(all_data, current_time=None, dynamic_preferences=None
 
 if __name__ == "__main__":
     # Example of using the core logic
-    all_parsed_data = load_all_data()
+    # Get the directory of the current script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Go up one level to the project root
+    project_root = os.path.dirname(script_dir)
+    # Construct the path to the Material directory
+    material_path = os.path.join(project_root, "Material")
+
+    all_parsed_data = load_all_data(material_path)
 
     if all_parsed_data["rare_schedule"]:  # Basic check if data loaded
         # Simulate current time for testing (e.g., Friday morning)
         simulated_time = datetime(2025, 4, 25, 10, 0, 0)
-        next_up = find_next_rare_opening(all_parsed_data, current_time=simulated_time)
+        # Get preferences directly from the loaded data for this test run
+        test_preferences = all_parsed_data.get("preferences", {})
+        next_up = find_next_rare_opening(
+            all_parsed_data,
+            current_time=simulated_time,
+            dynamic_preferences=test_preferences,
+        )
 
         print("\n--- Next Recommended Opening(s) ---")
         if next_up:
