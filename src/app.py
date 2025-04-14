@@ -2,7 +2,7 @@ import os
 import sys
 import json
 from flask import Flask, jsonify, render_template, request
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Ensure the src directory is in the Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -12,6 +12,16 @@ from src.core_logic import load_all_data, find_next_rare_opening
 
 # --- Flask App Initialization ---
 app = Flask(__name__)
+
+# --- Constants for MC Time Parsing ---
+EVENT_YEAR = 2025
+EVENT_DATES = {
+    "FRIDAY": f"{EVENT_YEAR}-04-25",
+    "SATURDAY": f"{EVENT_YEAR}-04-26",
+    # Add other days if necessary
+}
+MC_DURATION_MINUTES = 60  # Assume 1 hour duration
+# ----------------------------------
 
 # --- Global Data Store ---
 # Load data once when the app starts
@@ -33,12 +43,49 @@ def load_data_if_needed():
             material_dir = os.path.join(project_root, "Material")
             ALL_DATA = load_all_data(material_dir)
 
-            # Load master class data
+            # Load and Pre-process master class data
             master_classes_path = os.path.join(app.static_folder, "master_classes.json")
             if os.path.exists(master_classes_path):
                 with open(master_classes_path, "r", encoding="utf-8") as f:
-                    MASTER_CLASSES_DATA = json.load(f)
-                print(f"[{now}] Loaded {len(MASTER_CLASSES_DATA)} master classes.")
+                    raw_mc_data = json.load(f)
+
+                processed_mc_data = []
+                for mc in raw_mc_data:
+                    try:
+                        day_str = mc.get("day", "").upper()
+                        time_str = mc.get("time", "")
+                        date_str = EVENT_DATES.get(day_str)
+
+                        if date_str and time_str:
+                            # Combine date and time, assuming HH:MM format for time
+                            start_dt_str = f"{date_str} {time_str}"
+                            mc["start_datetime"] = datetime.strptime(
+                                start_dt_str, "%Y-%m-%d %H:%M"
+                            )
+                            mc["end_datetime"] = mc["start_datetime"] + timedelta(
+                                minutes=MC_DURATION_MINUTES
+                            )
+                        else:
+                            mc["start_datetime"] = None
+                            mc["end_datetime"] = None
+                            print(
+                                f"Warning: Could not parse datetime for MC: {mc.get('title')} (Day: {mc.get('day')}, Time: {time_str})",
+                                file=sys.stderr,
+                            )
+                        processed_mc_data.append(mc)
+                    except ValueError as ve:
+                        print(
+                            f"Warning: Invalid datetime format for MC: {mc.get('title')} (Day: {mc.get('day')}, Time: {time_str}). Error: {ve}",
+                            file=sys.stderr,
+                        )
+                        mc["start_datetime"] = None
+                        mc["end_datetime"] = None
+                        processed_mc_data.append(mc)  # Still append, but without times
+
+                MASTER_CLASSES_DATA = processed_mc_data
+                print(
+                    f"[{now}] Loaded and processed {len(MASTER_CLASSES_DATA)} master classes."
+                )
             else:
                 MASTER_CLASSES_DATA = []
                 print(
@@ -126,28 +173,50 @@ def get_next_opening():
                 400,
             )
 
-    # --- Get wines from attended Master Classes --- #
+    # --- Check for ignore_tasted flag --- #
+    ignore_tasted_flag = request.args.get("ignore_tasted", "false").lower() == "true"
+    if ignore_tasted_flag:
+        dynamic_preferences["ignore_tasted"] = True
+    # ---------------------------------- #
+
+    # --- Get wines and time slots from attended Master Classes --- #
     attended_mc_ids = request.args.getlist("attended_mc_id")
+    attended_mc_slots = []
+    excluded_wines_from_mc = set()  # Renamed to be specific
+
     if attended_mc_ids and MASTER_CLASSES_DATA:
         for mc_id in attended_mc_ids:
-            # Find the master class by its identifier (link or title/presenter combo)
             found_mc = None
             for mc in MASTER_CLASSES_DATA:
+                # Use the pre-processed data
                 identifier = (
                     mc.get("link") or f"{mc.get('presenter')}-{mc.get('title')}"
                 )
                 if identifier == mc_id:
                     found_mc = mc
                     break
-            if found_mc and found_mc.get("wines"):
-                excluded_wines.update(found_mc["wines"])
-                # print(f"DEBUG: Excluding wines from MC: {found_mc.get('title')}") # Optional debug
+            if found_mc:
+                # Collect the slot if datetimes are valid
+                if found_mc.get("start_datetime") and found_mc.get("end_datetime"):
+                    attended_mc_slots.append(
+                        {
+                            "start": found_mc["start_datetime"],
+                            "end": found_mc["end_datetime"],
+                        }
+                    )
+                # Collect wines to exclude
+                if found_mc.get("wines"):
+                    excluded_wines_from_mc.update(found_mc["wines"])
 
-    # Add explicitly excluded wines to preferences if any
-    if excluded_wines:
-        dynamic_preferences["excluded_wines"] = list(excluded_wines)
-        # print(f"DEBUG: Total excluded wines: {excluded_wines}") # Optional debug
-    # --------------------------------------------- #
+    # Add collected data to dynamic preferences
+    if excluded_wines_from_mc:
+        dynamic_preferences["excluded_wines"] = list(excluded_wines_from_mc)
+    if attended_mc_slots:
+        dynamic_preferences["attended_mc_slots"] = attended_mc_slots
+    # ---------------------------------------------------------- #
+
+    # --- Determine Current Time (Allow Override for Testing) --- #
+    custom_time_str = request.args.get("custom_time")
 
     current_time = datetime.now()
 

@@ -286,13 +286,24 @@ def find_next_rare_opening(all_data, current_time=None, dynamic_preferences=None
         effective_preferences.update(dynamic_preferences)  # Update the local copy
 
     # --- Combine tasted and excluded wines --- #
-    all_excluded_wines = set(tasted_champagnes)
+    # Determine if we should ignore the personal tasted list
+    ignore_tasted = effective_preferences.get("ignore_tasted", False)
+
+    # Start with wines excluded dynamically (e.g., from selected MCs)
+    final_excluded_wines = set()
     dynamically_excluded = set(effective_preferences.get("excluded_wines", []))
     if dynamically_excluded:
         normalized_dynamic_excluded = {
             normalize_name(wine) for wine in dynamically_excluded
         }
-        all_excluded_wines.update(normalized_dynamic_excluded)
+        final_excluded_wines.update(normalized_dynamic_excluded)
+
+    # Add wines from personal tasting list ONLY if ignore_tasted is False
+    if not ignore_tasted:
+        final_excluded_wines.update(
+            tasted_champagnes
+        )  # tasted_champagnes is already normalized
+
     # -------------------------------------------- #
 
     # --- Pre-process schedule: Add datetime objects --- #
@@ -315,21 +326,34 @@ def find_next_rare_opening(all_data, current_time=None, dynamic_preferences=None
 
     # --- Filtering Logic --- #
     possible_openings = []
+    # Get MC slots from effective preferences, default to empty list
+    attended_mc_slots = effective_preferences.get("attended_mc_slots", [])
+
     # Filter PROCESSED schedule for future openings
     for opening in processed_schedule:
         opening_time = opening["datetime"]  # Now this key exists
         if opening_time > current_time:
-            # Check against tasting slots
+            # Check against tasting slots AND attended MC slots
             is_free = True
+            # Check personal tasting schedule
             for slot in tasting_slots:
                 if slot["start"] <= opening_time < slot["end"]:
                     is_free = False
+                    # print(f"DEBUG: {opening['name']} conflicts with tasting slot {slot}") # Optional debug
                     break
+            # Check attended Master Classes if still free
+            if is_free and attended_mc_slots:
+                for mc_slot in attended_mc_slots:
+                    if mc_slot["start"] <= opening_time < mc_slot["end"]:
+                        is_free = False
+                        # print(f"DEBUG: {opening['name']} conflicts with MC slot {mc_slot}") # Optional debug
+                        break
+
             if is_free:
                 # Normalize wine name from schedule for exclusion check
                 normalized_opening_name = normalize_name(opening.get("name"))
-                # Check if already tasted or excluded
-                if normalized_opening_name not in all_excluded_wines:
+                # Check if already tasted or excluded (using the final combined set)
+                if normalized_opening_name not in final_excluded_wines:
                     possible_openings.append(opening)
 
     if not possible_openings:

@@ -361,6 +361,15 @@
                      <input type="number" name="older_than_year" id="older-than-input" min="1900" max="2025" placeholder="e.g., 1990">
                  </div>
 
+                 <!-- Add the new checkbox here -->
+                 <div class="pref-group">
+                    <label style="display: flex; align-items: center; font-weight: normal;">
+                        <input type="checkbox" name="ignore_tasted" id="ignore-tasted-checkbox" style="width: auto; margin: 0 10px 0 0; appearance: checkbox; -webkit-appearance: checkbox; -moz-appearance: checkbox;">
+                        <span>Show wines already tasted (from tastings.txt)</span>
+                    </label>
+                 </div>
+                 <!-- End of new checkbox -->
+
                  <div class="button-group" style="margin-top: 20px;">
                      <!-- Apply button removed - will auto-apply on change -->
                      <button type="button" id="ville-prefs-btn" class="action-button secondary">Ville Defaults</button>
