@@ -413,8 +413,8 @@ def find_next_rare_opening(all_data, current_time=None, dynamic_preferences=None
     # Sort primarily by datetime (ascending), secondarily by score (descending)
     scored_openings.sort(key=lambda x: (x["datetime"], -x["preference_score"]))
 
-    # Return top 3
-    return scored_openings[:3]
+    # Return top 4
+    return scored_openings[:4]
 
 
 if __name__ == "__main__":
