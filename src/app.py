@@ -246,7 +246,25 @@ def get_next_opening():
     # --- Determine Current Time (Allow Override for Testing) --- #
     custom_time_str = request.args.get("custom_time")
 
-    current_time = datetime.now()
+    # Get server's naive time (which we know is UTC)
+    current_time_naive_utc = datetime.now()
+
+    # --- ADJUSTMENT FOR EASIEST FIX ---
+    # Add 3 hours to approximate EEST (since event is during EEST/UTC+3)
+    current_time_approx_eest = current_time_naive_utc + timedelta(hours=3)
+    current_time = current_time_approx_eest  # Pass this approximated EEST time
+    # ----------------------------------
+
+    # --- Update Logging (Optional but Recommended) ---
+    print(
+        f"LOG_APP: Request received. Server Naive Time (UTC): {current_time_naive_utc.isoformat()}",
+        file=sys.stderr,
+    )
+    print(
+        f"LOG_APP: Approximated Naive EEST passed to core: {current_time.isoformat()}",
+        file=sys.stderr,
+    )
+    # --------------------------
 
     # --- Pass preferences (including excluded wines) to core logic --- #
     next_openings = find_next_rare_opening(

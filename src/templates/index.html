@@ -390,6 +390,20 @@
             </div>
         </div>
 
+        <!-- Tab 4: Maps -->
+        <div id="maps-tab-content" class="tab-pane">
+            <h2>Floor Maps</h2>
+            <div class="map-container" style="margin-bottom: 20px;">
+                <h4>1st Floor</h4>
+                <img src="{{ url_for('static', filename='1st_floor.png') }}" alt="Map of First Floor" style="max-width: 100%; height: auto; border: 1px solid #ccc;">
+            </div>
+            <div class="map-container">
+                 <h4>2nd Floor</h4>
+                 <img src="{{ url_for('static', filename='2nd_floor.png') }}" alt="Map of Second Floor" style="max-width: 100%; height: auto; border: 1px solid #ccc;">
+            </div>
+        </div>
+        <!-- End Maps Tab -->
+
     </div> <!-- End tab-content-container -->
 
     <!-- Bottom Tab Navigation -->
@@ -406,6 +420,12 @@
              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-3 2v5l-1-.75L15 9V4h2zm-3 7H8v-2h7v2zm3 0h-2v-2h2v2zm0-3H8V9h10v2z"/></svg>
             <span>Masterclass</span>
         </button>
+        <!-- New Map Button -->
+        <button class="tab-nav-button" data-tab="maps-tab-content">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+            <span>Maps</span>
+        </button>
+        <!-- End New Map Button -->
     </nav>
 
     <script>
